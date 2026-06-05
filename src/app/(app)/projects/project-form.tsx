@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 
 type Option = { id: string; name: string };
 type ProjectInitial = {
@@ -89,7 +90,7 @@ export function ProjectForm({
     {},
   );
 
-  const [clientId, setClientId] = useState(project?.clientId ?? "none");
+  const [clientId, setClientId] = useState(project?.clientId ?? "");
   const [contractValue, setContractValue] = useState(
     project ? String(Number(project.contractValue)) : "",
   );
@@ -106,6 +107,14 @@ export function ProjectForm({
           { termName: "Pelunasan 50%", percentage: 50 },
         ]
       : [],
+  );
+
+  const clientOptions = useMemo<ComboboxOption[]>(
+    () => [
+      { value: "", label: "— Tanpa klien —" },
+      ...clients.map((c) => ({ value: c.id, label: c.name })),
+    ],
+    [clients],
   );
 
   const value = Number(contractValue) || 0;
@@ -164,21 +173,17 @@ export function ProjectForm({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {canEditFinance && (
                   <div className="space-y-1.5">
-                    <Label>Klien</Label>
-                    <input type="hidden" name="clientId" value={clientId === "none" ? "" : clientId} />
-                    <Select value={clientId} onValueChange={setClientId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pilih klien" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">— Tanpa klien —</SelectItem>
-                        {clients.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="client">Klien</Label>
+                    <input type="hidden" name="clientId" value={clientId} />
+                    <Combobox
+                      id="client"
+                      options={clientOptions}
+                      value={clientId}
+                      onChange={setClientId}
+                      placeholder="Pilih klien"
+                      searchPlaceholder="Cari klien…"
+                      emptyText="Klien tidak ditemukan."
+                    />
                   </div>
                 )}
 
