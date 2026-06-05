@@ -71,6 +71,16 @@ export default async function NotaFeePage({
         </div>
       </div>
 
+      {assignment.employee.bankAccount && (
+        <div className="mt-5 rounded-lg border border-slate-200 p-4 text-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-400">Ditransfer ke rekening</p>
+          <p className="font-semibold">
+            {assignment.employee.bankName} — {assignment.employee.bankAccount}
+          </p>
+          <p className="text-slate-600">a.n. {assignment.employee.name}</p>
+        </div>
+      )}
+
       <div className="mt-12 grid grid-cols-2 gap-8 text-center text-sm">
         <div>
           <p className="text-slate-500">Penerima,</p>

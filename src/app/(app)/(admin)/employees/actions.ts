@@ -49,6 +49,8 @@ export async function createEmployee(
       data: {
         name,
         contact: str(formData.get("contact")) || null,
+        bankName: str(formData.get("bankName")) || null,
+        bankAccount: str(formData.get("bankAccount")) || null,
         joinedAt: joinedAt ?? new Date(),
         notes: str(formData.get("notes")) || null,
         username,
@@ -87,6 +89,8 @@ export async function updateEmployee(
       data: {
         name,
         contact: str(formData.get("contact")) || null,
+        bankName: str(formData.get("bankName")) || null,
+        bankAccount: str(formData.get("bankAccount")) || null,
         joinedAt: dateOrNull(formData.get("joinedAt")) ?? undefined,
         notes: str(formData.get("notes")) || null,
         username,

@@ -22,6 +22,8 @@ export async function updateOwnProfile(
     where: { id: session.uid },
     data: {
       contact: str(formData.get("contact")) || null,
+      bankName: str(formData.get("bankName")) || null,
+      bankAccount: str(formData.get("bankAccount")) || null,
       notes: str(formData.get("notes")) || null,
     },
   });

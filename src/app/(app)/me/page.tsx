@@ -77,7 +77,12 @@ export default async function MePage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ProfileForm contact={employee.contact} notes={employee.notes} />
+        <ProfileForm
+          contact={employee.contact}
+          bankName={employee.bankName}
+          bankAccount={employee.bankAccount}
+          notes={employee.notes}
+        />
         <PasswordForm />
       </div>
 

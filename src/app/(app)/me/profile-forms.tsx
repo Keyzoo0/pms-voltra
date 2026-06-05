@@ -18,9 +18,13 @@ import {
 
 export function ProfileForm({
   contact,
+  bankName,
+  bankAccount,
   notes,
 }: {
   contact: string | null;
+  bankName: string | null;
+  bankAccount: string | null;
   notes: string | null;
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(
@@ -44,6 +48,16 @@ export function ProfileForm({
           <div className="space-y-1.5">
             <Label htmlFor="contact">Kontak</Label>
             <Input id="contact" name="contact" defaultValue={contact ?? ""} placeholder="No HP / Email" />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="bankName">Bank</Label>
+              <Input id="bankName" name="bankName" defaultValue={bankName ?? ""} placeholder="cth. BCA" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bankAccount">No. Rekening</Label>
+              <Input id="bankAccount" name="bankAccount" defaultValue={bankAccount ?? ""} placeholder="cth. 1234567890" inputMode="numeric" />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="notes">Catatan</Label>

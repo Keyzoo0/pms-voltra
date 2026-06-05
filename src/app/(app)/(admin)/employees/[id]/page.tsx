@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import {
   BadgeCheck,
   CalendarDays,
+  Landmark,
   Mail,
   Pencil,
   Trash2,
@@ -200,6 +201,17 @@ export default async function EmployeeDetailPage({
                 <span className="text-sm text-muted-foreground">Belum ada role.</span>
               )}
             </div>
+            {(employee.bankName || employee.bankAccount) && (
+              <div className="rounded-lg border border-border/60 p-3 text-sm">
+                <p className="flex items-center gap-2 text-muted-foreground">
+                  <Landmark className="size-4" /> Rekening
+                </p>
+                <p className="mt-1 font-medium">
+                  {employee.bankName} · {employee.bankAccount}
+                </p>
+                <p className="text-xs text-muted-foreground">a.n. {employee.name}</p>
+              </div>
+            )}
             <div className="space-y-1.5 border-t border-border/60 pt-3 text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <CalendarDays className="size-4" /> Bergabung: {formatDate(employee.joinedAt)}

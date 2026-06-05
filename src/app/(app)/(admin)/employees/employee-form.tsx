@@ -23,6 +23,8 @@ type EmployeeInitial = {
   name: string;
   username: string | null;
   contact: string | null;
+  bankName: string | null;
+  bankAccount: string | null;
   joinedAt: Date | null;
   notes: string | null;
   roleIds: string[];
@@ -68,6 +70,16 @@ export function EmployeeForm({
             <div className="space-y-1.5">
               <Label htmlFor="contact">Kontak</Label>
               <Input id="contact" name="contact" defaultValue={employee?.contact ?? ""} placeholder="No HP / Email" />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="bankName">Bank</Label>
+                <Input id="bankName" name="bankName" defaultValue={employee?.bankName ?? ""} placeholder="cth. BCA" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="bankAccount">No. Rekening</Label>
+                <Input id="bankAccount" name="bankAccount" defaultValue={employee?.bankAccount ?? ""} placeholder="cth. 1234567890" inputMode="numeric" />
+              </div>
             </div>
             <div className="space-y-1.5 sm:max-w-xs">
               <Label htmlFor="joinedAt">Tgl Bergabung</Label>

@@ -76,6 +76,8 @@ model Employee {
   username     String?            @unique
   passwordHash String?
   contact      String?
+  bankName     String?
+  bankAccount  String?
   status      EmployeeStatus      @default(active)
   joinedAt    DateTime            @default(now())
   leftAt      DateTime?

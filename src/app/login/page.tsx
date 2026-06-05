@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { ShieldCheck } from "lucide-react";
-import { BrandMark } from "@/components/brand";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
@@ -35,12 +34,16 @@ export default async function LoginPage({
 
       <div className="relative w-full max-w-sm">
         <div className="mb-7 flex flex-col items-center text-center">
-          <BrandMark className="size-14" />
-          <h1 className="mt-4 text-xl font-semibold tracking-tight text-foreground">
-            Voltra Techno PMS
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Masuk untuk mengelola proyek, SDM & keuangan.
+          <div className="rounded-2xl bg-white p-4 shadow-lg shadow-slate-900/5 ring-1 ring-black/5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.jpeg"
+              alt="Voltra Techno"
+              className="h-16 w-auto object-contain"
+            />
+          </div>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Sistem Manajemen Proyek · SDM · Keuangan
           </p>
         </div>
 
