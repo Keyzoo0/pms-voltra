@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { del, put } from "@vercel/blob";
 import { db } from "@/lib/db";
 import { toNum } from "@/lib/utils";
 import {
@@ -57,6 +58,30 @@ function parsePurchase(v: FormDataEntryValue | null): PurStatus {
 export type FormState = { ok?: boolean; error?: string };
 
 const DENY: FormState = { error: "Anda tidak memiliki izin untuk aksi ini." };
+
+async function uploadImage(
+  file: FormDataEntryValue | null,
+  prefix: string,
+): Promise<{ url?: string; error?: string }> {
+  if (!(file instanceof File) || file.size === 0) return { error: "Pilih file gambar." };
+  if (!file.type.startsWith("image/")) return { error: "File harus berupa gambar." };
+  if (file.size > 8 * 1024 * 1024) return { error: "Ukuran gambar maksimal 8MB." };
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const blob = await put(`${prefix}.${ext}`, file, {
+    access: "public",
+    addRandomSuffix: true,
+  });
+  return { url: blob.url };
+}
+
+async function deleteBlobSafe(url: string | null | undefined) {
+  if (!url) return;
+  try {
+    await del(url);
+  } catch {
+    // ignore — blob may already be gone
+  }
+}
 
 // ── guards ────────────────────────────────────────────────
 async function assertManage(projectId: string) {
@@ -259,6 +284,42 @@ export async function toggleFeeStatus(assignmentId: string, projectId: string) {
   revalidatePath("/fees");
 }
 
+export async function uploadFeeProof(
+  assignmentId: string,
+  projectId: string,
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await assertProjectAdmin(projectId);
+  const up = await uploadImage(formData.get("file"), `proofs/fee/${assignmentId}`);
+  if (up.error) return { error: up.error };
+  const old = await db.projectAssignment.findUnique({
+    where: { id: assignmentId },
+    select: { feeProofUrl: true },
+  });
+  await db.projectAssignment.update({
+    where: { id: assignmentId },
+    data: { feeProofUrl: up.url },
+  });
+  await deleteBlobSafe(old?.feeProofUrl);
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true };
+}
+
+export async function removeFeeProof(assignmentId: string, projectId: string) {
+  await assertProjectAdmin(projectId);
+  const a = await db.projectAssignment.findUnique({
+    where: { id: assignmentId },
+    select: { feeProofUrl: true },
+  });
+  await deleteBlobSafe(a?.feeProofUrl);
+  await db.projectAssignment.update({
+    where: { id: assignmentId },
+    data: { feeProofUrl: null },
+  });
+  revalidatePath(`/projects/${projectId}`);
+}
+
 export async function setAssignmentManager(
   assignmentId: string,
   projectId: string,
@@ -323,6 +384,34 @@ export async function cycleItemStatus(itemId: string, projectId: string) {
     data: { purchaseStatus: next },
   });
   revalidatePath(`/projects/${projectId}`);
+}
+
+export async function updateItem(
+  itemId: string,
+  projectId: string,
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  if (!canEditBasics(await getProjectAccess(projectId))) return DENY;
+  const name = str(formData.get("name"));
+  if (!name) return { error: "Nama item wajib diisi." };
+  const quantity = Math.max(1, Math.round(num(formData.get("quantity")) || 1));
+  const unitPrice = num(formData.get("unitPrice"));
+
+  await db.projectItem.update({
+    where: { id: itemId },
+    data: {
+      name,
+      quantity,
+      unitPrice,
+      totalPrice: quantity * unitPrice,
+      link: str(formData.get("link")) || null,
+      source: parseSource(formData.get("source")),
+      purchaseStatus: parsePurchase(formData.get("purchaseStatus")),
+    },
+  });
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true };
 }
 
 export async function addCost(
@@ -398,6 +487,42 @@ export async function togglePaymentTerm(termId: string, projectId: string) {
   });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/");
+}
+
+export async function uploadPaymentProof(
+  termId: string,
+  projectId: string,
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await assertProjectAdmin(projectId);
+  const up = await uploadImage(formData.get("file"), `proofs/payment/${termId}`);
+  if (up.error) return { error: up.error };
+  const old = await db.projectPaymentTerm.findUnique({
+    where: { id: termId },
+    select: { proofUrl: true },
+  });
+  await db.projectPaymentTerm.update({
+    where: { id: termId },
+    data: { proofUrl: up.url },
+  });
+  await deleteBlobSafe(old?.proofUrl);
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true };
+}
+
+export async function removePaymentProof(termId: string, projectId: string) {
+  await assertProjectAdmin(projectId);
+  const t = await db.projectPaymentTerm.findUnique({
+    where: { id: termId },
+    select: { proofUrl: true },
+  });
+  await deleteBlobSafe(t?.proofUrl);
+  await db.projectPaymentTerm.update({
+    where: { id: termId },
+    data: { proofUrl: null },
+  });
+  revalidatePath(`/projects/${projectId}`);
 }
 
 export async function generateDefaultTerms(projectId: string) {

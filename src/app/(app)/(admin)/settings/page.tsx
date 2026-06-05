@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Layers, Trash2, UserCog } from "lucide-react";
 import { db } from "@/lib/db";
+import { getAppSettings } from "@/lib/settings";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
+import { CompanyProfileForm } from "./company-form";
 import {
   Card,
   CardContent,
@@ -22,7 +24,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Pengaturan" };
 
 export default async function SettingsPage() {
-  const [categories, roles] = await Promise.all([
+  const [categories, roles, settings] = await Promise.all([
     db.category.findMany({
       include: { _count: { select: { projects: true } } },
       orderBy: { name: "asc" },
@@ -33,14 +35,17 @@ export default async function SettingsPage() {
       },
       orderBy: { name: "asc" },
     }),
+    getAppSettings(),
   ]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Pengaturan"
-        description="Kelola kategori proyek dan role karyawan yang bersifat dinamis."
+        description="Profil perusahaan, kategori proyek, dan role karyawan."
       />
+
+      <CompanyProfileForm settings={settings} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Categories */}

@@ -8,6 +8,7 @@ import {
   Crown,
   ExternalLink,
   FileSpreadsheet,
+  FileText,
   Package,
   Pencil,
   Receipt,
@@ -57,7 +58,9 @@ import {
   AddCostForm,
   AddItemDialog,
   AddPaymentTermDialog,
+  EditItemDialog,
   ProgressControl,
+  ProofCell,
   StatusControl,
 } from "./controls";
 import {
@@ -68,9 +71,13 @@ import {
   deletePaymentTerm,
   deleteProject,
   generateDefaultTerms,
+  removeFeeProof,
+  removePaymentProof,
   setAssignmentManager,
   togglePaymentTerm,
   toggleFeeStatus,
+  uploadFeeProof,
+  uploadPaymentProof,
 } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -209,6 +216,13 @@ export default async function ProjectDetailPage({
               <Button variant="outline" size="sm" asChild>
                 <a href={`/api/export/project?id=${project.id}`}>
                   <FileSpreadsheet /> Export P&L
+                </a>
+              </Button>
+            )}
+            {isAdmin && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={`/projects/${project.id}/nota/klien`} target="_blank" rel="noreferrer">
+                  <FileText /> Nota Klien
                 </a>
               </Button>
             )}
@@ -479,6 +493,7 @@ export default async function ProjectDetailPage({
                       <TableHead>PM</TableHead>
                       {isAdmin && <TableHead className="text-right">Fee</TableHead>}
                       {isAdmin && <TableHead>Status Fee</TableHead>}
+                      {isAdmin && <TableHead>Bukti Fee</TableHead>}
                       {isAdmin && <TableHead className="pr-5 text-right">Aksi</TableHead>}
                     </TableRow>
                   </TableHeader>
@@ -539,12 +554,36 @@ export default async function ProjectDetailPage({
                           </TableCell>
                         )}
                         {isAdmin && (
+                          <TableCell>
+                            {a.feeStatus === "paid" ? (
+                              <ProofCell
+                                url={a.feeProofUrl}
+                                uploadAction={uploadFeeProof.bind(null, a.id, project.id)}
+                                removeAction={removeFeeProof.bind(null, a.id, project.id)}
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        )}
+                        {isAdmin && (
                           <TableCell className="pr-5 text-right">
-                            <form action={deleteAssignment.bind(null, a.id, project.id)}>
-                              <IconButton>
-                                <Trash2 className="size-4" />
-                              </IconButton>
-                            </form>
+                            <div className="flex items-center justify-end gap-1">
+                              <a
+                                href={`/projects/${project.id}/nota/fee/${a.id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Nota fee"
+                                className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-primary"
+                              >
+                                <FileText className="size-4" />
+                              </a>
+                              <form action={deleteAssignment.bind(null, a.id, project.id)}>
+                                <IconButton>
+                                  <Trash2 className="size-4" />
+                                </IconButton>
+                              </form>
+                            </div>
                           </TableCell>
                         )}
                       </TableRow>
@@ -578,7 +617,14 @@ export default async function ProjectDetailPage({
                 <CardTitle>Kebutuhan Material (BOM)</CardTitle>
                 <CardDescription>Klik status beli untuk mengubahnya.</CardDescription>
               </div>
-              <AddItemDialog projectId={project.id} />
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <a href={`/projects/${project.id}/nota/kebutuhan`} target="_blank" rel="noreferrer">
+                    <FileText /> Nota Kebutuhan
+                  </a>
+                </Button>
+                <AddItemDialog projectId={project.id} />
+              </div>
             </CardHeader>
             <CardContent className="px-0 pb-0">
               {project.items.length ? (
@@ -621,11 +667,25 @@ export default async function ProjectDetailPage({
                           </form>
                         </TableCell>
                         <TableCell className="pr-5 text-right">
-                          <form action={deleteItem.bind(null, it.id, project.id)}>
-                            <IconButton>
-                              <Trash2 className="size-4" />
-                            </IconButton>
-                          </form>
+                          <div className="flex items-center justify-end gap-1">
+                            <EditItemDialog
+                              projectId={project.id}
+                              item={{
+                                id: it.id,
+                                name: it.name,
+                                quantity: it.quantity,
+                                unitPrice: toNum(it.unitPrice),
+                                link: it.link,
+                                source: it.source,
+                                purchaseStatus: it.purchaseStatus,
+                              }}
+                            />
+                            <form action={deleteItem.bind(null, it.id, project.id)}>
+                              <IconButton>
+                                <Trash2 className="size-4" />
+                              </IconButton>
+                            </form>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -705,6 +765,7 @@ export default async function ProjectDetailPage({
                         <TableHead className="text-right">Nominal</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Tgl Bayar</TableHead>
+                        <TableHead>Bukti</TableHead>
                         <TableHead className="pr-5" />
                       </TableRow>
                     </TableHeader>
@@ -722,6 +783,17 @@ export default async function ProjectDetailPage({
                             </form>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{formatDate(t.paidAt)}</TableCell>
+                          <TableCell>
+                            {t.status === "paid" ? (
+                              <ProofCell
+                                url={t.proofUrl}
+                                uploadAction={uploadPaymentProof.bind(null, t.id, project.id)}
+                                removeAction={removePaymentProof.bind(null, t.id, project.id)}
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="pr-5 text-right">
                             <form action={deletePaymentTerm.bind(null, t.id, project.id)}>
                               <IconButton>

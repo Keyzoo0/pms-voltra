@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Plus, Save } from "lucide-react";
+import { Loader2, Pencil, Plus, Save, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   addAssignment,
@@ -10,6 +10,7 @@ import {
   addPaymentTerm,
   setProjectProgress,
   setProjectStatus,
+  updateItem,
   type FormState,
 } from "../actions";
 import {
@@ -44,17 +45,21 @@ type Action = (prev: FormState, formData: FormData) => Promise<FormState>;
 
 function FormDialog({
   triggerLabel,
+  trigger,
   title,
   description,
   action,
   successMessage,
+  submitLabel = "Simpan",
   children,
 }: {
-  triggerLabel: string;
+  triggerLabel?: string;
+  trigger?: React.ReactNode;
   title: string;
   description?: string;
   action: Action;
   successMessage: string;
+  submitLabel?: string;
   children: React.ReactNode;
 }) {
   const [state, formAction, pending] = React.useActionState<FormState, FormData>(
@@ -74,9 +79,11 @@ function FormDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          <Plus /> {triggerLabel}
-        </Button>
+        {trigger ?? (
+          <Button size="sm" variant="outline">
+            <Plus /> {triggerLabel}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -98,7 +105,7 @@ function FormDialog({
             </DialogClose>
             <Button type="submit" disabled={pending}>
               {pending ? <Loader2 className="animate-spin" /> : <Save />}
-              Simpan
+              {submitLabel}
             </Button>
           </DialogFooter>
         </form>
@@ -382,6 +389,161 @@ export function AddCostForm({ projectId }: { projectId: string }) {
       />
       <Button type="submit" variant="outline" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" /> : <Plus />} Tambah
+      </Button>
+    </form>
+  );
+}
+
+export function EditItemDialog({
+  projectId,
+  item,
+}: {
+  projectId: string;
+  item: {
+    id: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    link: string | null;
+    source: string;
+    purchaseStatus: string;
+  };
+}) {
+  return (
+    <FormDialog
+      trigger={
+        <button
+          type="button"
+          className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-primary"
+          title="Edit item"
+        >
+          <Pencil className="size-4" />
+        </button>
+      }
+      title="Edit Item BOM"
+      description="Perbarui detail item kebutuhan."
+      action={updateItem.bind(null, item.id, projectId)}
+      successMessage="Item diperbarui."
+    >
+      <div className="space-y-1.5">
+        <Label htmlFor="edit-name">Nama Item *</Label>
+        <Input id="edit-name" name="name" defaultValue={item.name} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-qty">Jumlah</Label>
+          <Input id="edit-qty" name="quantity" type="number" min={1} defaultValue={item.quantity} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-price">Harga Satuan (IDR)</Label>
+          <Input id="edit-price" name="unitPrice" inputMode="numeric" defaultValue={item.unitPrice} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label>Sumber</Label>
+          <Select name="source" defaultValue={item.source}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ITEM_SOURCE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Status Beli</Label>
+          <Select name="purchaseStatus" defaultValue={item.purchaseStatus}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PURCHASE_STATUS_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="edit-link">Link Pembelian</Label>
+        <Input id="edit-link" name="link" defaultValue={item.link ?? ""} placeholder="https://… (opsional)" />
+      </div>
+    </FormDialog>
+  );
+}
+
+export function ProofCell({
+  url,
+  uploadAction,
+  removeAction,
+}: {
+  url: string | null;
+  uploadAction: Action;
+  removeAction: () => void;
+}) {
+  const [state, formAction, pending] = React.useActionState<FormState, FormData>(
+    uploadAction,
+    {},
+  );
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (state.ok) toast.success("Bukti diunggah.");
+    else if (state.error) toast.error(state.error);
+  }, [state]);
+
+  if (url) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <a href={url} target="_blank" rel="noreferrer" title="Lihat bukti">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt="Bukti pembayaran"
+            className="size-9 rounded-md object-cover ring-1 ring-border transition-opacity hover:opacity-80"
+          />
+        </a>
+        <form action={removeAction}>
+          <button
+            type="submit"
+            className="text-muted-foreground transition-colors hover:text-destructive"
+            title="Hapus bukti"
+          >
+            <X className="size-3.5" />
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <form action={formAction}>
+      <input
+        ref={inputRef}
+        type="file"
+        name="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) e.target.form?.requestSubmit();
+        }}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending}
+        onClick={() => inputRef.current?.click()}
+      >
+        {pending ? <Loader2 className="animate-spin" /> : <Upload className="size-3.5" />}
+        Upload
       </Button>
     </form>
   );

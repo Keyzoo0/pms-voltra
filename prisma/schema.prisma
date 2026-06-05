@@ -135,10 +135,11 @@ model ProjectAssignment {
   employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   roleId     String?
   role       Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  fee        Decimal   @default(0) @db.Decimal(15, 2)
-  feeStatus  FeeStatus @default(pending)
-  isManager  Boolean   @default(false)
-  assignedAt DateTime  @default(now())
+  fee         Decimal   @default(0) @db.Decimal(15, 2)
+  feeStatus   FeeStatus @default(pending)
+  feeProofUrl String?
+  isManager   Boolean   @default(false)
+  assignedAt  DateTime  @default(now())
   notes      String?
   createdAt  DateTime  @default(now())
 
@@ -163,6 +164,19 @@ model ProjectItem {
   @@index([projectId])
 }
 
+model AppSettings {
+  id          String   @id @default("singleton")
+  companyName String   @default("Voltra Techno")
+  address     String?
+  phone       String?
+  email       String?
+  bankName    String?
+  bankAccount String?
+  bankHolder  String?
+  logoUrl     String?
+  updatedAt   DateTime @updatedAt
+}
+
 model ProjectAdditionalCost {
   id        String   @id @default(cuid())
   projectId String
@@ -183,6 +197,7 @@ model ProjectPaymentTerm {
   amount     Decimal       @default(0) @db.Decimal(15, 2)
   status     PaymentStatus @default(unpaid)
   paidAt     DateTime?
+  proofUrl   String?
   sortOrder  Int           @default(0)
   createdAt  DateTime      @default(now())
 
