@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { del, put } from "@vercel/blob";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { setAdminPassword, verifyAdminPassword } from "@/lib/admin-auth";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -76,6 +77,26 @@ export async function removeLogo() {
     update: { logoUrl: null },
   });
   revalidatePath("/settings");
+}
+
+export async function changeAdminPassword(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requireAdmin();
+
+  const current = String(formData.get("current") ?? "");
+  const next = String(formData.get("next") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+
+  if (next.length < 8) return { error: "Password baru minimal 8 karakter." };
+  if (next !== confirm) return { error: "Konfirmasi password tidak cocok." };
+
+  const ok = await verifyAdminPassword(current);
+  if (!ok) return { error: "Password lama salah." };
+
+  await setAdminPassword(next);
+  return { ok: true };
 }
 
 export async function addCategory(

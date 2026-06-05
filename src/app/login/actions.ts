@@ -7,9 +7,9 @@ import { db } from "@/lib/db";
 import {
   SESSION_COOKIE,
   SESSION_COOKIE_OPTIONS,
-  checkAdminCredentials,
   createSessionToken,
 } from "@/lib/auth";
+import { verifyAdminCredentials } from "@/lib/admin-auth";
 
 export type LoginState = { error?: string };
 
@@ -25,8 +25,8 @@ export async function login(
   const store = await cookies();
   const from = String(formData.get("from") ?? "");
 
-  // Admin (owner) — credentials from env.
-  if (checkAdminCredentials(username, password)) {
+  // Admin (owner) — username from env; password from DB hash (or env fallback).
+  if (await verifyAdminCredentials(username, password)) {
     const token = await createSessionToken({
       uid: "admin",
       role: "admin",

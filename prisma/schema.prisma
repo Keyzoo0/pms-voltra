@@ -167,16 +167,17 @@ model ProjectItem {
 }
 
 model AppSettings {
-  id          String   @id @default("singleton")
-  companyName String   @default("Voltra Techno")
-  address     String?
-  phone       String?
-  email       String?
-  bankName    String?
-  bankAccount String?
-  bankHolder  String?
-  logoUrl     String?
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default("singleton")
+  companyName      String   @default("Voltra Techno")
+  address          String?
+  phone            String?
+  email            String?
+  bankName         String?
+  bankAccount      String?
+  bankHolder       String?
+  logoUrl          String?
+  adminPasswordHash String?
+  updatedAt        DateTime @updatedAt
 }
 
 model ProjectAdditionalCost {
