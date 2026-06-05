@@ -1,0 +1,187 @@
+// Voltra Techno — Project Management System
+// Prisma 7 schema (prisma-client generator + driver adapter, no Rust engine)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum EmployeeStatus {
+  active
+  inactive
+}
+
+enum ProjectStatus {
+  inquiry
+  quotation
+  approved
+  in_progress
+  delivered
+  paid
+  closed
+  on_hold
+  cancelled
+  dispute
+}
+
+enum FeeStatus {
+  pending
+  paid
+}
+
+enum ItemSource {
+  company
+  client
+  reimburse
+}
+
+enum PurchaseStatus {
+  not_purchased
+  purchased
+  reimbursed
+}
+
+enum PaymentStatus {
+  unpaid
+  paid
+}
+
+// ─────────────────────────────────────────────────────────────
+// Core models
+// ─────────────────────────────────────────────────────────────
+
+model Client {
+  id        String    @id @default(cuid())
+  name      String
+  picName   String?
+  contact   String?
+  address   String?
+  notes     String?
+  projects  Project[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Employee {
+  id          String              @id @default(cuid())
+  name        String
+  contact     String?
+  status      EmployeeStatus      @default(active)
+  joinedAt    DateTime            @default(now())
+  leftAt      DateTime?
+  notes       String?
+  roles       Role[]              @relation("EmployeeRoles")
+  assignments ProjectAssignment[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  projects  Project[] @relation("ProjectCategories")
+  createdAt DateTime  @default(now())
+}
+
+model Role {
+  id          String              @id @default(cuid())
+  name        String              @unique
+  employees   Employee[]          @relation("EmployeeRoles")
+  requiredFor Project[]           @relation("ProjectRequiredRoles")
+  assignments ProjectAssignment[]
+  createdAt   DateTime            @default(now())
+}
+
+model Project {
+  id              String                  @id @default(cuid())
+  name            String
+  description     String?
+  clientId        String?
+  client          Client?                 @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  contractValue   Decimal                 @default(0) @db.Decimal(15, 2)
+  startDate       DateTime?
+  deadline        DateTime?
+  status          ProjectStatus           @default(inquiry)
+  progress        Int                     @default(0)
+  notes           String?
+  categories      Category[]              @relation("ProjectCategories")
+  requiredRoles   Role[]                  @relation("ProjectRequiredRoles")
+  assignments     ProjectAssignment[]
+  items           ProjectItem[]
+  additionalCosts ProjectAdditionalCost[]
+  paymentTerms    ProjectPaymentTerm[]
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([status])
+  @@index([clientId])
+}
+
+model ProjectAssignment {
+  id         String    @id @default(cuid())
+  projectId  String
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  roleId     String?
+  role       Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  fee        Decimal   @default(0) @db.Decimal(15, 2)
+  feeStatus  FeeStatus @default(pending)
+  assignedAt DateTime  @default(now())
+  notes      String?
+  createdAt  DateTime  @default(now())
+
+  @@index([projectId])
+  @@index([employeeId])
+}
+
+model ProjectItem {
+  id             String         @id @default(cuid())
+  projectId      String
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name           String
+  quantity       Int            @default(1)
+  link           String?
+  unitPrice      Decimal        @default(0) @db.Decimal(15, 2)
+  totalPrice     Decimal        @default(0) @db.Decimal(15, 2)
+  source         ItemSource     @default(company)
+  purchaseStatus PurchaseStatus @default(not_purchased)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([projectId])
+}
+
+model ProjectAdditionalCost {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  amount    Decimal  @default(0) @db.Decimal(15, 2)
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model ProjectPaymentTerm {
+  id         String        @id @default(cuid())
+  projectId  String
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  termName   String
+  percentage Decimal       @default(0) @db.Decimal(5, 2)
+  amount     Decimal       @default(0) @db.Decimal(15, 2)
+  status     PaymentStatus @default(unpaid)
+  paidAt     DateTime?
+  sortOrder  Int           @default(0)
+  createdAt  DateTime      @default(now())
+
+  @@index([projectId])
+}

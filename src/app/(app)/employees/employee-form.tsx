@@ -1,0 +1,136 @@
+"use client";
+
+import { useActionState } from "react";
+import { useRouter } from "next/navigation";
+import { AlertCircle, Loader2, Save } from "lucide-react";
+import type { FormState } from "./actions";
+import { toDateInputValue } from "@/lib/utils";
+import { MultiChipField } from "@/components/multi-chip-field";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+type Option = { id: string; name: string };
+type EmployeeInitial = {
+  name: string;
+  contact: string | null;
+  status: string;
+  joinedAt: Date | null;
+  leftAt: Date | null;
+  notes: string | null;
+  roleIds: string[];
+};
+
+export function EmployeeForm({
+  mode,
+  action,
+  roles,
+  employee,
+}: {
+  mode: "create" | "edit";
+  action: (prev: FormState, formData: FormData) => Promise<FormState>;
+  roles: Option[];
+  employee?: EmployeeInitial;
+}) {
+  const router = useRouter();
+  const [state, formAction, pending] = useActionState<FormState, FormData>(
+    action,
+    {},
+  );
+
+  return (
+    <form action={formAction} className="space-y-6">
+      {state.error && (
+        <p className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <AlertCircle className="size-4 shrink-0" />
+          {state.error}
+        </p>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Data Karyawan</CardTitle>
+            <CardDescription>Informasi dasar karyawan.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="name">Nama Lengkap *</Label>
+              <Input id="name" name="name" defaultValue={employee?.name} placeholder="cth. Rizky Pratama" required autoFocus />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="contact">Kontak</Label>
+              <Input id="contact" name="contact" defaultValue={employee?.contact ?? ""} placeholder="No HP / Email" />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <Select name="status" defaultValue={employee?.status ?? "active"}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Aktif</SelectItem>
+                    <SelectItem value="inactive">Nonaktif</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="joinedAt">Tgl Bergabung</Label>
+                <Input id="joinedAt" name="joinedAt" type="date" defaultValue={toDateInputValue(employee?.joinedAt) || toDateInputValue(new Date())} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="leftAt">Tgl Keluar</Label>
+                <Input id="leftAt" name="leftAt" type="date" defaultValue={toDateInputValue(employee?.leftAt)} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="notes">Catatan</Label>
+              <Textarea id="notes" name="notes" defaultValue={employee?.notes ?? ""} placeholder="Catatan tambahan…" rows={2} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Role / Keahlian</CardTitle>
+            <CardDescription>Bisa lebih dari satu.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MultiChipField
+              name="roleIds"
+              options={roles}
+              initial={employee?.roleIds}
+              emptyText="Belum ada role. Tambah di Pengaturan."
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex items-center justify-end gap-2">
+        <Button type="button" variant="outline" onClick={() => router.back()}>
+          Batal
+        </Button>
+        <Button type="submit" disabled={pending}>
+          {pending ? <Loader2 className="animate-spin" /> : <Save />}
+          {mode === "create" ? "Tambah Karyawan" : "Simpan Perubahan"}
+        </Button>
+      </div>
+    </form>
+  );
+}

@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Voltra Techno — Project Management System (PMS)
 
-## Getting Started
+Sistem manajemen proyek, SDM, dan keuangan untuk **Voltra Techno** — jasa
+development teknologi (IoT, Robotika, Machine Learning, PLC, SCADA, dll).
 
-First, run the development server:
+Single-user (Owner/PM) app dengan dashboard bisnis, manajemen proyek end-to-end
+(lifecycle, assignment, BOM, pembayaran), laporan laba-rugi, rekap fee karyawan,
+dan export Excel.
+
+## ✨ Fitur
+
+- **Dashboard** — ringkasan bisnis, grafik arus kas & distribusi status, alert
+  deadline dan pembayaran outstanding.
+- **Proyek** — CRUD lengkap, lifecycle 10 status, multi-kategori & role,
+  assignment karyawan + fee, BOM (material), biaya tambahan, termin pembayaran,
+  dan laporan **Laba Rugi (P&L)** otomatis per proyek.
+- **Karyawan** — CRUD, multi-role dinamis, status aktif/idle, riwayat proyek &
+  total fee (lifetime).
+- **Klien** — CRM ringan: riwayat proyek, total nilai, outstanding payment.
+- **Keuangan** — P&L keseluruhan + per proyek, filter per tahun.
+- **Rekap Fee** — total fee per karyawan + status pencairan.
+- **Pengaturan** — kelola kategori & role secara dinamis.
+- **Export Excel** — P&L proyek, laporan keuangan, rekap fee (.xlsx).
+- **Auth** — login owner sederhana (cookie ber-tanda-tangan HMAC).
+
+## 🛠 Tech Stack
+
+| Layer | Teknologi |
+|---|---|
+| Framework | Next.js 16 (App Router) + React 19 + TypeScript |
+| Styling | Tailwind CSS v4 + komponen ala shadcn/ui |
+| Database | PostgreSQL (Neon) |
+| ORM | Prisma 7 (driver adapter `@prisma/adapter-pg`) |
+| Charts | Recharts |
+| Export | ExcelJS |
+| Deploy | Vercel |
+
+## 🚀 Menjalankan Lokal
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env          # isi DATABASE_URL, AUTH_PASSWORD, AUTH_SECRET
+pnpm prisma db push           # buat skema di database
+pnpm db:seed                  # isi data contoh
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Buka http://localhost:3000 — login dengan `AUTH_PASSWORD` (default `voltra-admin`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🔐 Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Keterangan |
+|---|---|
+| `DATABASE_URL` | Connection string PostgreSQL (pakai pooled URL untuk serverless) |
+| `AUTH_PASSWORD` | Password login owner |
+| `AUTH_SECRET` | Secret untuk menandatangani cookie sesi (string acak panjang) |
 
-## Learn More
+## 📦 Scripts
 
-To learn more about Next.js, take a look at the following resources:
+- `pnpm dev` — development server
+- `pnpm build` — `prisma generate` + production build
+- `pnpm db:push` — sinkron skema ke database
+- `pnpm db:seed` — isi data contoh
+- `pnpm db:studio` — Prisma Studio
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Dibuat berdasarkan `VOLTRA_PMS_Documentation.md`.
