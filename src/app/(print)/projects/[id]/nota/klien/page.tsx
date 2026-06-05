@@ -36,6 +36,11 @@ export default async function NotaKlienPage({
 
   const fin = computeProjectFinance(project);
   const clientItems = project.items.filter((i) => i.source === "client");
+  const lastPaidAt =
+    project.paymentTerms
+      .filter((t) => t.paidAt)
+      .map((t) => t.paidAt as Date)
+      .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
   const now = new Date();
   const docNumber = `INV/${project.id.slice(-6).toUpperCase()}/${now.getFullYear()}`;
 
@@ -148,7 +153,8 @@ export default async function NotaKlienPage({
         </div>
       </div>
 
-      {settings.bankAccount && (
+      {/* Rekening hanya ditampilkan bila masih ada tagihan tersisa. */}
+      {!fin.isFullyPaid && settings.bankAccount && (
         <div className="mt-6 rounded-lg border border-slate-200 p-4 text-sm">
           <p className="text-xs uppercase tracking-wide text-slate-400">Pembayaran ditransfer ke</p>
           <p className="font-semibold">
@@ -158,8 +164,20 @@ export default async function NotaKlienPage({
         </div>
       )}
 
-      <div className="mt-10 flex justify-end text-center text-sm">
-        <div>
+      <div className="mt-10 flex items-end justify-between gap-6">
+        {fin.isFullyPaid ? (
+          <div className="rotate-[-8deg] rounded-lg border-4 border-emerald-500 px-6 py-2 text-center text-emerald-600 [print-color-adjust:exact] [-webkit-print-color-adjust:exact]">
+            <p className="text-2xl font-extrabold uppercase tracking-[0.2em]">LUNAS</p>
+            {lastPaidAt && (
+              <p className="text-[10px] font-semibold uppercase tracking-wide">
+                {formatDate(lastPaidAt)}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div />
+        )}
+        <div className="text-center text-sm">
           <p className="text-slate-500">Hormat kami,</p>
           <div className="h-16" />
           <p className="border-t border-slate-400 pt-1 font-medium">{settings.companyName}</p>
