@@ -43,9 +43,7 @@ export default async function EditEmployeePage({
           name: employee.name,
           username: employee.username,
           contact: employee.contact,
-          status: employee.status,
           joinedAt: employee.joinedAt,
-          leftAt: employee.leftAt,
           notes: employee.notes,
           roleIds: employee.roles.map((r) => r.id),
         }}

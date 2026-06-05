@@ -7,6 +7,8 @@ import {
   Mail,
   Pencil,
   Trash2,
+  UserCheck,
+  UserX,
   Wallet,
 } from "lucide-react";
 import { db } from "@/lib/db";
@@ -42,7 +44,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { deleteEmployee } from "../actions";
+import {
+  deactivateEmployee,
+  deleteEmployee,
+  reactivateEmployee,
+} from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -102,29 +108,71 @@ export default async function EmployeeDetailPage({
               <h1 className="text-2xl font-semibold tracking-tight">{employee.name}</h1>
               <StatusBadge meta={EMPLOYEE_STATUS[employee.status as EmployeeStatus]} />
             </div>
+            {employee.username && (
+              <p className="mt-0.5 text-xs text-muted-foreground">@{employee.username}</p>
+            )}
             {employee.contact && (
               <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Mail className="size-3.5" /> {employee.contact}
               </p>
             )}
+            {employee.status === "inactive" && employee.leftAt && (
+              <p className="mt-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                Nonaktif sejak {formatDate(employee.leftAt)}
+              </p>
+            )}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link href={`/employees/${employee.id}/edit`}>
               <Pencil /> Edit
             </Link>
           </Button>
-          <ConfirmDialog
-            action={deleteEmployee.bind(null, employee.id)}
-            title="Hapus karyawan ini?"
-            description={`Data "${employee.name}" dan seluruh assignment-nya akan dihapus permanen.`}
-            trigger={
-              <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10">
-                <Trash2 /> Hapus
+
+          {employee.status === "active" ? (
+            <ConfirmDialog
+              action={deactivateEmployee.bind(null, employee.id)}
+              variant="default"
+              icon={<UserX />}
+              confirmLabel="Nonaktifkan"
+              title="Nonaktifkan karyawan ini?"
+              description={`"${employee.name}" akan ditandai keluar & tidak bisa login lagi. Assignment di proyek yang BELUM selesai akan dilepas (proyek selesai tetap tercatat). Bisa diaktifkan kembali nanti.`}
+              trigger={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                >
+                  <UserX /> Nonaktifkan
+                </Button>
+              }
+            />
+          ) : (
+            <form action={reactivateEmployee.bind(null, employee.id)}>
+              <Button
+                type="submit"
+                variant="outline"
+                size="sm"
+                className="text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
+              >
+                <UserCheck /> Aktifkan kembali
               </Button>
-            }
-          />
+            </form>
+          )}
+
+          {employee.assignments.length === 0 && (
+            <ConfirmDialog
+              action={deleteEmployee.bind(null, employee.id)}
+              title="Hapus karyawan ini?"
+              description={`Data "${employee.name}" akan dihapus permanen. Hanya bisa karena belum punya riwayat proyek.`}
+              trigger={
+                <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10">
+                  <Trash2 /> Hapus
+                </Button>
+              }
+            />
+          )}
         </div>
       </div>
 

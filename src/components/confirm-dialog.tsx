@@ -15,11 +15,21 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-function ConfirmSubmit({ label }: { label: string }) {
+type Variant = "destructive" | "default";
+
+function ConfirmSubmit({
+  label,
+  variant,
+  icon,
+}: {
+  label: string;
+  variant: Variant;
+  icon: React.ReactNode;
+}) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant="destructive" disabled={pending}>
-      {pending ? <Loader2 className="animate-spin" /> : <Trash2 />}
+    <Button type="submit" variant={variant} disabled={pending}>
+      {pending ? <Loader2 className="animate-spin" /> : icon}
       {label}
     </Button>
   );
@@ -31,12 +41,16 @@ export function ConfirmDialog({
   description,
   confirmLabel = "Hapus",
   trigger,
+  variant = "destructive",
+  icon,
 }: {
   action: () => void | Promise<void>;
   title: string;
   description?: string;
   confirmLabel?: string;
   trigger: React.ReactNode;
+  variant?: Variant;
+  icon?: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
   return (
@@ -52,7 +66,11 @@ export function ConfirmDialog({
             <Button variant="outline">Batal</Button>
           </DialogClose>
           <form action={action}>
-            <ConfirmSubmit label={confirmLabel} />
+            <ConfirmSubmit
+              label={confirmLabel}
+              variant={variant}
+              icon={icon ?? <Trash2 />}
+            />
           </form>
         </DialogFooter>
       </DialogContent>

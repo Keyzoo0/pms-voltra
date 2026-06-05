@@ -6,6 +6,9 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 
+// Projects considered "selesai" — assignments here are preserved on deactivate.
+const FINISHED_STATUSES = ["closed", "paid", "cancelled"] as const;
+
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
 }
@@ -14,9 +17,6 @@ function dateOrNull(v: FormDataEntryValue | null): Date | null {
   if (!s) return null;
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
-}
-function parseEmployeeStatus(v: FormDataEntryValue | null): "active" | "inactive" {
-  return str(v) === "inactive" ? "inactive" : "active";
 }
 function isUniqueError(e: unknown): boolean {
   return (
@@ -49,9 +49,7 @@ export async function createEmployee(
       data: {
         name,
         contact: str(formData.get("contact")) || null,
-        status: parseEmployeeStatus(formData.get("status")),
         joinedAt: joinedAt ?? new Date(),
-        leftAt: dateOrNull(formData.get("leftAt")),
         notes: str(formData.get("notes")) || null,
         username,
         ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
@@ -89,9 +87,7 @@ export async function updateEmployee(
       data: {
         name,
         contact: str(formData.get("contact")) || null,
-        status: parseEmployeeStatus(formData.get("status")),
         joinedAt: dateOrNull(formData.get("joinedAt")) ?? undefined,
-        leftAt: dateOrNull(formData.get("leftAt")),
         notes: str(formData.get("notes")) || null,
         username,
         ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
@@ -109,8 +105,48 @@ export async function updateEmployee(
   redirect(`/employees/${id}`);
 }
 
+/** "Memecat / resign" — soft. Keeps history; removes from ongoing projects. */
+export async function deactivateEmployee(id: string) {
+  await requireAdmin();
+
+  await db.projectAssignment.deleteMany({
+    where: {
+      employeeId: id,
+      project: { status: { notIn: [...FINISHED_STATUSES] } },
+    },
+  });
+
+  await db.employee.update({
+    where: { id },
+    data: { status: "inactive", leftAt: new Date() },
+  });
+
+  revalidatePath("/employees");
+  revalidatePath(`/employees/${id}`);
+  revalidatePath("/projects");
+  revalidatePath("/fees");
+  revalidatePath("/");
+}
+
+export async function reactivateEmployee(id: string) {
+  await requireAdmin();
+  await db.employee.update({
+    where: { id },
+    data: { status: "active", leftAt: null },
+  });
+  revalidatePath("/employees");
+  revalidatePath(`/employees/${id}`);
+}
+
+/** Hard delete — only allowed when the employee has no project history. */
 export async function deleteEmployee(id: string) {
   await requireAdmin();
+  const count = await db.projectAssignment.count({ where: { employeeId: id } });
+  if (count > 0) {
+    throw new Error(
+      "Karyawan masih memiliki riwayat proyek. Nonaktifkan saja, jangan dihapus.",
+    );
+  }
   await db.employee.delete({ where: { id } });
   revalidatePath("/employees");
   revalidatePath("/");

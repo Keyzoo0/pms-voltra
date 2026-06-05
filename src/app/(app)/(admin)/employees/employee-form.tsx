@@ -17,22 +17,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 type Option = { id: string; name: string };
 type EmployeeInitial = {
   name: string;
   username: string | null;
   contact: string | null;
-  status: string;
   joinedAt: Date | null;
-  leftAt: Date | null;
   notes: string | null;
   roleIds: string[];
 };
@@ -78,27 +69,9 @@ export function EmployeeForm({
               <Label htmlFor="contact">Kontak</Label>
               <Input id="contact" name="contact" defaultValue={employee?.contact ?? ""} placeholder="No HP / Email" />
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label>Status</Label>
-                <Select name="status" defaultValue={employee?.status ?? "active"}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Aktif</SelectItem>
-                    <SelectItem value="inactive">Nonaktif</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="joinedAt">Tgl Bergabung</Label>
-                <Input id="joinedAt" name="joinedAt" type="date" defaultValue={toDateInputValue(employee?.joinedAt) || toDateInputValue(new Date())} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="leftAt">Tgl Keluar</Label>
-                <Input id="leftAt" name="leftAt" type="date" defaultValue={toDateInputValue(employee?.leftAt)} />
-              </div>
+            <div className="space-y-1.5 sm:max-w-xs">
+              <Label htmlFor="joinedAt">Tgl Bergabung</Label>
+              <Input id="joinedAt" name="joinedAt" type="date" defaultValue={toDateInputValue(employee?.joinedAt) || toDateInputValue(new Date())} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="notes">Catatan</Label>
