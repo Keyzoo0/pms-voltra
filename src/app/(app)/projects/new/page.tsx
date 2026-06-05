@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/session";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProjectForm } from "../project-form";
 import { createProject } from "../actions";
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Proyek Baru" };
 
 export default async function NewProjectPage() {
+  await requireAdmin();
   const [clients, categories, roles] = await Promise.all([
     db.client.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.category.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),

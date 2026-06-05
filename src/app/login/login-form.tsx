@@ -15,14 +15,27 @@ export function LoginForm({ from }: { from?: string }) {
       <input type="hidden" name="from" value={from ?? ""} />
 
       <div className="space-y-1.5">
-        <Label htmlFor="password">Password Owner</Label>
+        <Label htmlFor="username">Username</Label>
+        <Input
+          id="username"
+          name="username"
+          type="text"
+          placeholder="admin / username karyawan"
+          autoComplete="username"
+          autoFocus
+          required
+          aria-invalid={state.error ? true : undefined}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="password">Password</Label>
         <Input
           id="password"
           name="password"
           type="password"
           placeholder="••••••••••"
           autoComplete="current-password"
-          autoFocus
           required
           aria-invalid={state.error ? true : undefined}
         />

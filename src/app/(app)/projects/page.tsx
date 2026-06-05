@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FolderKanban, Plus } from "lucide-react";
+import { Crown, FolderKanban, Plus } from "lucide-react";
 import { db } from "@/lib/db";
 import { computeProjectFinance } from "@/lib/finance";
+import { requireSession } from "@/lib/session";
 import { PROJECT_STATUS, type ProjectStatus } from "@/lib/constants";
 import { daysUntil, formatDate, formatIDR } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
@@ -30,6 +31,94 @@ export default async function ProjectsPage({
 }: {
   searchParams: Promise<{ status?: string; category?: string; q?: string }>;
 }) {
+  const session = await requireSession();
+
+  // ── Employee view: only their projects, no valuation ─────
+  if (session.role !== "admin") {
+    const projects = await db.project.findMany({
+      where: { assignments: { some: { employeeId: session.uid } } },
+      include: {
+        client: { select: { name: true } },
+        assignments: {
+          where: { employeeId: session.uid },
+          select: { isManager: true },
+        },
+      },
+      orderBy: { deadline: "asc" },
+    });
+
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Proyek Saya"
+          description={`${projects.length} proyek yang Anda kerjakan.`}
+        />
+        <Card>
+          <CardContent className="px-0 pb-0">
+            {projects.length ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-5">Proyek</TableHead>
+                    <TableHead>Klien</TableHead>
+                    <TableHead className="w-36">Progress</TableHead>
+                    <TableHead>Deadline</TableHead>
+                    <TableHead>Peran</TableHead>
+                    <TableHead className="pr-5 text-right">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {projects.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="pl-5">
+                        <Link href={`/projects/${p.id}`} className="font-medium hover:text-primary">
+                          {p.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {p.client?.name ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Progress value={p.progress} className="w-16" />
+                          <span className="text-xs tabular-nums text-muted-foreground">{p.progress}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(p.deadline)}
+                      </TableCell>
+                      <TableCell>
+                        {p.assignments[0]?.isManager ? (
+                          <Badge variant="default" className="gap-1">
+                            <Crown className="size-3" /> PM
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Anggota</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="pr-5 text-right">
+                        <StatusBadge meta={PROJECT_STATUS[p.status as ProjectStatus]} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="p-5">
+                <EmptyState
+                  icon={FolderKanban}
+                  title="Belum ada proyek"
+                  description="Anda belum di-assign ke proyek manapun."
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Admin view: all projects + filters + valuation ───────
   const sp = await searchParams;
   const status = sp.status;
   const category = sp.category;
@@ -38,21 +127,13 @@ export default async function ProjectsPage({
   const [projects, categories] = await Promise.all([
     db.project.findMany({
       where: {
-        ...(status && status !== "all"
-          ? { status: status as ProjectStatus }
-          : {}),
-        ...(category && category !== "all"
-          ? { categories: { some: { id: category } } }
-          : {}),
+        ...(status && status !== "all" ? { status: status as ProjectStatus } : {}),
+        ...(category && category !== "all" ? { categories: { some: { id: category } } } : {}),
         ...(q
           ? {
               OR: [
                 { name: { contains: q, mode: "insensitive" as const } },
-                {
-                  client: {
-                    is: { name: { contains: q, mode: "insensitive" as const } },
-                  },
-                },
+                { client: { is: { name: { contains: q, mode: "insensitive" as const } } } },
               ],
             }
           : {}),
@@ -109,10 +190,7 @@ export default async function ProjectsPage({
                   return (
                     <TableRow key={p.id}>
                       <TableCell className="pl-5">
-                        <Link
-                          href={`/projects/${p.id}`}
-                          className="font-medium text-foreground hover:text-primary"
-                        >
+                        <Link href={`/projects/${p.id}`} className="font-medium text-foreground hover:text-primary">
                           {p.name}
                         </Link>
                         <div className="mt-1 flex flex-wrap gap-1">
@@ -128,9 +206,7 @@ export default async function ProjectsPage({
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {p.client?.name ?? "—"}
-                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{p.client?.name ?? "—"}</TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatIDR(fin.revenue)}
                         {fin.outstanding > 0 && (
@@ -142,19 +218,13 @@ export default async function ProjectsPage({
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Progress value={p.progress} className="w-16" />
-                          <span className="text-xs tabular-nums text-muted-foreground">
-                            {p.progress}%
-                          </span>
+                          <span className="text-xs tabular-nums text-muted-foreground">{p.progress}%</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm">
-                        <span className="text-muted-foreground">
-                          {formatDate(p.deadline)}
-                        </span>
+                        <span className="text-muted-foreground">{formatDate(p.deadline)}</span>
                         {d !== null && d < 0 && p.status !== "closed" && p.status !== "paid" && (
-                          <p className="text-xs text-rose-600 dark:text-rose-400">
-                            telat {Math.abs(d)}h
-                          </p>
+                          <p className="text-xs text-rose-600 dark:text-rose-400">telat {Math.abs(d)}h</p>
                         )}
                       </TableCell>
                       <TableCell className="pr-5 text-right">
@@ -170,11 +240,7 @@ export default async function ProjectsPage({
               <EmptyState
                 icon={FolderKanban}
                 title={isFiltered ? "Tidak ada proyek cocok" : "Belum ada proyek"}
-                description={
-                  isFiltered
-                    ? "Coba ubah filter atau kata kunci pencarian."
-                    : "Mulai dengan membuat proyek pertama Anda."
-                }
+                description={isFiltered ? "Coba ubah filter atau kata kunci pencarian." : "Mulai dengan membuat proyek pertama Anda."}
                 action={
                   !isFiltered && (
                     <Button asChild>

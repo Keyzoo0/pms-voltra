@@ -1,4 +1,5 @@
 import "dotenv/config";
+import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 
@@ -174,6 +175,15 @@ async function main() {
     }),
   };
 
+  // Give every employee a login (username = key, password = "karyawan123").
+  const passwordHash = await bcrypt.hash("karyawan123", 10);
+  for (const [username, emp] of Object.entries(e)) {
+    await db.employee.update({
+      where: { id: emp.id },
+      data: { username, passwordHash },
+    });
+  }
+
   // ── Projects ──────────────────────────────────────────────
   type Term = { termName: string; percentage: number; paid: boolean; paidOffset?: number };
   type Item = {
@@ -184,7 +194,13 @@ async function main() {
     purchaseStatus: "not_purchased" | "purchased" | "reimbursed";
     link?: string;
   };
-  type Assign = { empId: string; role: string; fee: number; feeStatus?: "pending" | "paid" };
+  type Assign = {
+    empId: string;
+    role: string;
+    fee: number;
+    feeStatus?: "pending" | "paid";
+    isManager?: boolean;
+  };
 
   async function makeProject(opts: {
     name: string;
@@ -222,6 +238,7 @@ async function main() {
             role: { connect: { name: a.role } },
             fee: a.fee,
             feeStatus: (a.feeStatus ?? "pending") as never,
+            isManager: a.isManager ?? false,
           })),
         },
         items: {
@@ -264,7 +281,7 @@ async function main() {
     requiredRoles: ["Firmware Engineer", "IoT Developer", "Frontend Developer"],
     notes: "Klien minta integrasi notifikasi WhatsApp di fase 2.",
     assignments: [
-      { empId: e.rizky.id, role: "Firmware Engineer", fee: 9_000_000 },
+      { empId: e.rizky.id, role: "Firmware Engineer", fee: 9_000_000, isManager: true },
       { empId: e.dewi.id, role: "Frontend Developer", fee: 7_000_000 },
     ],
     items: [
@@ -297,7 +314,7 @@ async function main() {
     categories: ["Robotika", "PLC"],
     requiredRoles: ["Automation Engineer", "Electrical Engineer", "3D Drafter"],
     assignments: [
-      { empId: e.eko.id, role: "Automation Engineer", fee: 15_000_000 },
+      { empId: e.eko.id, role: "Automation Engineer", fee: 15_000_000, isManager: true },
       { empId: e.bagus.id, role: "Electrical Engineer", fee: 11_000_000 },
       { empId: e.arif.id, role: "3D Drafter", fee: 6_500_000 },
     ],
@@ -332,7 +349,7 @@ async function main() {
     requiredRoles: ["Automation Engineer", "Backend Developer", "Electrical Engineer"],
     notes: "Sudah serah terima, menunggu pembayaran termin akhir.",
     assignments: [
-      { empId: e.eko.id, role: "Automation Engineer", fee: 12_000_000 },
+      { empId: e.eko.id, role: "Automation Engineer", fee: 12_000_000, isManager: true },
       { empId: e.putri.id, role: "Backend Developer", fee: 9_500_000 },
     ],
     items: [

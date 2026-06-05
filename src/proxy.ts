@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE, readSessionToken } from "@/lib/auth";
 
 // Next.js 16 renamed the "middleware" convention to "proxy".
 export async function proxy(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const valid = await verifySessionToken(token);
+  const valid = (await readSessionToken(token)) !== null;
   const { pathname } = req.nextUrl;
   const isLogin = pathname === "/login";
 

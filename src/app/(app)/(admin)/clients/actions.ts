@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/session";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -14,6 +15,7 @@ export async function createClient(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await requireAdmin();
   const name = str(formData.get("name"));
   if (!name) return { error: "Nama klien wajib diisi." };
 
@@ -36,6 +38,7 @@ export async function updateClient(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await requireAdmin();
   const name = str(formData.get("name"));
   if (!name) return { error: "Nama klien wajib diisi." };
 
@@ -56,6 +59,7 @@ export async function updateClient(
 }
 
 export async function deleteClient(id: string) {
+  await requireAdmin();
   await db.client.delete({ where: { id } });
   revalidatePath("/clients");
   redirect("/clients");

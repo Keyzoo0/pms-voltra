@@ -71,9 +71,11 @@ model Client {
 }
 
 model Employee {
-  id          String              @id @default(cuid())
-  name        String
-  contact     String?
+  id           String             @id @default(cuid())
+  name         String
+  username     String?            @unique
+  passwordHash String?
+  contact      String?
   status      EmployeeStatus      @default(active)
   joinedAt    DateTime            @default(now())
   leftAt      DateTime?
@@ -135,6 +137,7 @@ model ProjectAssignment {
   role       Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
   fee        Decimal   @default(0) @db.Decimal(15, 2)
   feeStatus  FeeStatus @default(pending)
+  isManager  Boolean   @default(false)
   assignedAt DateTime  @default(now())
   notes      String?
   createdAt  DateTime  @default(now())

@@ -4,6 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { toNum } from "@/lib/utils";
+import {
+  canEditBasics,
+  canManageProject,
+  getProjectAccess,
+  requireAdmin,
+} from "@/lib/session";
 
 // ── helpers ───────────────────────────────────────────────
 function str(v: FormDataEntryValue | null): string {
@@ -36,9 +42,7 @@ const ITEM_SOURCES = ["company", "client", "reimburse"] as const;
 type ISource = (typeof ITEM_SOURCES)[number];
 function parseSource(v: FormDataEntryValue | null): ISource {
   const s = str(v);
-  return (ITEM_SOURCES as readonly string[]).includes(s)
-    ? (s as ISource)
-    : "company";
+  return (ITEM_SOURCES as readonly string[]).includes(s) ? (s as ISource) : "company";
 }
 
 const PURCHASE_STATUSES = ["not_purchased", "purchased", "reimbursed"] as const;
@@ -52,11 +56,30 @@ function parsePurchase(v: FormDataEntryValue | null): PurStatus {
 
 export type FormState = { ok?: boolean; error?: string };
 
+const DENY: FormState = { error: "Anda tidak memiliki izin untuk aksi ini." };
+
+// ── guards ────────────────────────────────────────────────
+async function assertManage(projectId: string) {
+  const access = await getProjectAccess(projectId);
+  if (!canManageProject(access)) throw new Error("Forbidden");
+  return access;
+}
+async function assertEdit(projectId: string) {
+  const access = await getProjectAccess(projectId);
+  if (!canEditBasics(access)) throw new Error("Forbidden");
+  return access;
+}
+async function assertProjectAdmin(projectId: string) {
+  const access = await getProjectAccess(projectId);
+  if (access !== "admin") throw new Error("Forbidden");
+}
+
 // ── Project CRUD ──────────────────────────────────────────
 export async function createProject(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await requireAdmin();
   const name = str(formData.get("name"));
   if (!name) return { error: "Nama proyek wajib diisi." };
 
@@ -109,6 +132,10 @@ export async function updateProject(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const access = await getProjectAccess(id);
+  if (!canManageProject(access)) return DENY;
+  const isAdmin = access === "admin";
+
   const name = str(formData.get("name"));
   if (!name) return { error: "Nama proyek wajib diisi." };
 
@@ -123,8 +150,6 @@ export async function updateProject(
     data: {
       name,
       description: str(formData.get("description")) || null,
-      client: clientId ? { connect: { id: clientId } } : { disconnect: true },
-      contractValue,
       startDate: dateOrNull(formData.get("startDate")),
       deadline: dateOrNull(formData.get("deadline")),
       status: parseStatus(formData.get("status")),
@@ -132,19 +157,29 @@ export async function updateProject(
       notes: str(formData.get("notes")) || null,
       categories: { set: categoryIds.map((cid) => ({ id: cid })) },
       requiredRoles: { set: roleIds.map((rid) => ({ id: rid })) },
+      // Financial fields are admin-only.
+      ...(isAdmin
+        ? {
+            client: clientId
+              ? { connect: { id: clientId } }
+              : { disconnect: true },
+            contractValue,
+          }
+        : {}),
     },
   });
 
-  // Keep payment term amounts in sync with the (possibly new) contract value.
-  const terms = await db.projectPaymentTerm.findMany({ where: { projectId: id } });
-  await Promise.all(
-    terms.map((t) =>
-      db.projectPaymentTerm.update({
-        where: { id: t.id },
-        data: { amount: (toNum(t.percentage) / 100) * contractValue },
-      }),
-    ),
-  );
+  if (isAdmin) {
+    const terms = await db.projectPaymentTerm.findMany({ where: { projectId: id } });
+    await Promise.all(
+      terms.map((t) =>
+        db.projectPaymentTerm.update({
+          where: { id: t.id },
+          data: { amount: (toNum(t.percentage) / 100) * contractValue },
+        }),
+      ),
+    );
+  }
 
   revalidatePath("/projects");
   revalidatePath(`/projects/${id}`);
@@ -153,6 +188,7 @@ export async function updateProject(
 }
 
 export async function deleteProject(id: string) {
+  await requireAdmin();
   await db.project.delete({ where: { id } });
   revalidatePath("/projects");
   revalidatePath("/");
@@ -160,16 +196,15 @@ export async function deleteProject(id: string) {
 }
 
 export async function setProjectStatus(id: string, status: string) {
-  await db.project.update({
-    where: { id },
-    data: { status: parseStatus(status) },
-  });
+  await assertManage(id);
+  await db.project.update({ where: { id }, data: { status: parseStatus(status) } });
   revalidatePath(`/projects/${id}`);
   revalidatePath("/projects");
   revalidatePath("/");
 }
 
 export async function setProjectProgress(id: string, progress: number) {
+  await assertEdit(id);
   await db.project.update({
     where: { id },
     data: { progress: Math.min(100, Math.max(0, Math.round(progress))) },
@@ -178,12 +213,13 @@ export async function setProjectProgress(id: string, progress: number) {
   revalidatePath("/");
 }
 
-// ── Assignments ───────────────────────────────────────────
+// ── Assignments (admin only — fees are financial) ─────────
 export async function addAssignment(
   projectId: string,
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  if ((await getProjectAccess(projectId)) !== "admin") return DENY;
   const employeeId = str(formData.get("employeeId"));
   if (!employeeId) return { error: "Pilih karyawan." };
   const roleId = str(formData.get("roleId"));
@@ -194,6 +230,7 @@ export async function addAssignment(
       employee: { connect: { id: employeeId } },
       ...(roleId ? { role: { connect: { id: roleId } } } : {}),
       fee: num(formData.get("fee")),
+      isManager: str(formData.get("isManager")) === "on",
       notes: str(formData.get("notes")) || null,
     },
   });
@@ -203,16 +240,15 @@ export async function addAssignment(
   return { ok: true };
 }
 
-export async function deleteAssignment(
-  assignmentId: string,
-  projectId: string,
-) {
+export async function deleteAssignment(assignmentId: string, projectId: string) {
+  await assertProjectAdmin(projectId);
   await db.projectAssignment.delete({ where: { id: assignmentId } });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/");
 }
 
 export async function toggleFeeStatus(assignmentId: string, projectId: string) {
+  await assertProjectAdmin(projectId);
   const a = await db.projectAssignment.findUnique({ where: { id: assignmentId } });
   if (!a) return;
   await db.projectAssignment.update({
@@ -223,12 +259,27 @@ export async function toggleFeeStatus(assignmentId: string, projectId: string) {
   revalidatePath("/fees");
 }
 
-// ── BOM items ─────────────────────────────────────────────
+export async function setAssignmentManager(
+  assignmentId: string,
+  projectId: string,
+) {
+  await assertProjectAdmin(projectId);
+  const a = await db.projectAssignment.findUnique({ where: { id: assignmentId } });
+  if (!a) return;
+  await db.projectAssignment.update({
+    where: { id: assignmentId },
+    data: { isManager: !a.isManager },
+  });
+  revalidatePath(`/projects/${projectId}`);
+}
+
+// ── BOM items (admin, manager, member) ────────────────────
 export async function addItem(
   projectId: string,
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  if (!canEditBasics(await getProjectAccess(projectId))) return DENY;
   const name = str(formData.get("name"));
   if (!name) return { error: "Nama item wajib diisi." };
   const quantity = Math.max(1, Math.round(num(formData.get("quantity")) || 1));
@@ -252,11 +303,13 @@ export async function addItem(
 }
 
 export async function deleteItem(itemId: string, projectId: string) {
+  await assertEdit(projectId);
   await db.projectItem.delete({ where: { id: itemId } });
   revalidatePath(`/projects/${projectId}`);
 }
 
 export async function cycleItemStatus(itemId: string, projectId: string) {
+  await assertEdit(projectId);
   const item = await db.projectItem.findUnique({ where: { id: itemId } });
   if (!item) return;
   const next =
@@ -272,12 +325,12 @@ export async function cycleItemStatus(itemId: string, projectId: string) {
   revalidatePath(`/projects/${projectId}`);
 }
 
-// ── Additional costs ──────────────────────────────────────
 export async function addCost(
   projectId: string,
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  if (!canEditBasics(await getProjectAccess(projectId))) return DENY;
   const name = str(formData.get("name"));
   if (!name) return { error: "Nama biaya wajib diisi." };
   await db.projectAdditionalCost.create({
@@ -292,16 +345,18 @@ export async function addCost(
 }
 
 export async function deleteCost(costId: string, projectId: string) {
+  await assertEdit(projectId);
   await db.projectAdditionalCost.delete({ where: { id: costId } });
   revalidatePath(`/projects/${projectId}`);
 }
 
-// ── Payment terms ─────────────────────────────────────────
+// ── Payment terms (admin only — client revenue) ───────────
 export async function addPaymentTerm(
   projectId: string,
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  if ((await getProjectAccess(projectId)) !== "admin") return DENY;
   const termName = str(formData.get("termName"));
   if (!termName) return { error: "Nama termin wajib diisi." };
   const percentage = num(formData.get("percentage"));
@@ -326,27 +381,27 @@ export async function addPaymentTerm(
 }
 
 export async function deletePaymentTerm(termId: string, projectId: string) {
+  await assertProjectAdmin(projectId);
   await db.projectPaymentTerm.delete({ where: { id: termId } });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/");
 }
 
 export async function togglePaymentTerm(termId: string, projectId: string) {
+  await assertProjectAdmin(projectId);
   const term = await db.projectPaymentTerm.findUnique({ where: { id: termId } });
   if (!term) return;
   const paid = term.status === "paid";
   await db.projectPaymentTerm.update({
     where: { id: termId },
-    data: {
-      status: paid ? "unpaid" : "paid",
-      paidAt: paid ? null : new Date(),
-    },
+    data: { status: paid ? "unpaid" : "paid", paidAt: paid ? null : new Date() },
   });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/");
 }
 
 export async function generateDefaultTerms(projectId: string) {
+  await assertProjectAdmin(projectId);
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: { contractValue: true, _count: { select: { paymentTerms: true } } },

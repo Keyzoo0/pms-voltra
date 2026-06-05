@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import ExcelJS from "exceljs";
 import { db } from "@/lib/db";
 import { computeProjectFinance } from "@/lib/finance";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { SESSION_COOKIE, readSessionToken } from "@/lib/auth";
 import {
   FEE_STATUS,
   ITEM_SOURCE,
@@ -66,10 +66,12 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ report: string }> },
 ) {
-  // Auth guard (middleware excludes /api).
+  // Auth guard (proxy excludes /api). Exports expose finance → admin only.
   const store = await cookies();
-  const valid = await verifySessionToken(store.get(SESSION_COOKIE)?.value);
-  if (!valid) return new Response("Unauthorized", { status: 401 });
+  const session = await readSessionToken(store.get(SESSION_COOKIE)?.value);
+  if (!session || session.role !== "admin") {
+    return new Response("Unauthorized", { status: 401 });
+  }
 
   const { report } = await params;
   const url = new URL(request.url);

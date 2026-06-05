@@ -238,6 +238,17 @@ export function AddAssignmentDialog({
           <Input id="fee" name="fee" inputMode="numeric" placeholder="0" />
         </div>
       </div>
+      <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+        <input
+          type="checkbox"
+          name="isManager"
+          className="size-4 rounded border-input accent-primary"
+        />
+        <span>
+          Jadikan <span className="font-medium">Project Manager</span> — boleh
+          kelola status & detail proyek ini.
+        </span>
+      </label>
       <div className="space-y-1.5">
         <Label htmlFor="assign-notes">Catatan</Label>
         <Input id="assign-notes" name="notes" placeholder="Opsional" />

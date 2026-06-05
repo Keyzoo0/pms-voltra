@@ -14,7 +14,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-export function Topbar() {
+export function Topbar({
+  role,
+  name,
+}: {
+  role: "admin" | "employee";
+  name: string;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -35,7 +41,7 @@ export function Topbar() {
           className="left-0 top-0 h-full max-w-[16rem] translate-x-0 translate-y-0 gap-0 rounded-none border-y-0 border-l-0 p-0 data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-[16rem]"
         >
           <DialogTitle className="sr-only">Navigasi</DialogTitle>
-          <AppSidebar onNavigate={() => setOpen(false)} />
+          <AppSidebar role={role} name={name} onNavigate={() => setOpen(false)} />
         </DialogContent>
       </Dialog>
 
@@ -44,7 +50,10 @@ export function Topbar() {
         <span className="text-sm font-semibold tracking-tight">Voltra PMS</span>
       </div>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-2">
+        <span className="hidden text-sm text-muted-foreground sm:inline">
+          {name}
+        </span>
         <ThemeToggle />
         <form action={logout}>
           <Button

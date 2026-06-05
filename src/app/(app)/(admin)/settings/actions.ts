@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/session";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -13,6 +14,7 @@ export async function addCategory(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await requireAdmin();
   const name = str(formData.get("name"));
   if (!name) return { error: "Nama kategori wajib diisi." };
   const exists = await db.category.findUnique({ where: { name } });
@@ -23,6 +25,7 @@ export async function addCategory(
 }
 
 export async function deleteCategory(id: string) {
+  await requireAdmin();
   await db.category.delete({ where: { id } });
   revalidatePath("/settings");
 }
@@ -31,6 +34,7 @@ export async function addRole(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await requireAdmin();
   const name = str(formData.get("name"));
   if (!name) return { error: "Nama role wajib diisi." };
   const exists = await db.role.findUnique({ where: { name } });
@@ -41,6 +45,7 @@ export async function addRole(
 }
 
 export async function deleteRole(id: string) {
+  await requireAdmin();
   await db.role.delete({ where: { id } });
   revalidatePath("/settings");
 }

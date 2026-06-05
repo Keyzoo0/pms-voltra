@@ -41,6 +41,7 @@ export default async function EditEmployeePage({
         roles={roles}
         employee={{
           name: employee.name,
+          username: employee.username,
           contact: employee.contact,
           status: employee.status,
           joinedAt: employee.joinedAt,

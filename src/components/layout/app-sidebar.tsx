@@ -8,13 +8,14 @@ import {
   LayoutDashboard,
   ReceiptText,
   Settings,
+  User,
   Users,
   Wallet,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, initials } from "@/lib/utils";
 import { BrandMark } from "@/components/brand";
 
-const NAV = [
+const ADMIN_NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/projects", label: "Proyek", icon: FolderKanban },
   { href: "/employees", label: "Karyawan", icon: Users },
@@ -24,20 +25,30 @@ const NAV = [
   { href: "/settings", label: "Pengaturan", icon: Settings },
 ] as const;
 
-export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
+const EMPLOYEE_NAV = [
+  { href: "/projects", label: "Proyek Saya", icon: FolderKanban },
+  { href: "/me", label: "Profil Saya", icon: User },
+] as const;
+
+export function AppSidebar({
+  role,
+  name = "Owner",
+  onNavigate,
+}: {
+  role: "admin" | "employee";
+  name?: string;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
+  const nav = role === "admin" ? ADMIN_NAV : EMPLOYEE_NAV;
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 items-center gap-2.5 border-b border-sidebar-border px-5">
         <BrandMark className="size-9" />
         <div className="leading-tight">
-          <p className="text-sm font-semibold tracking-tight text-white">
-            Voltra Techno
-          </p>
-          <p className="text-[11px] text-sidebar-foreground/60">
-            Project Management
-          </p>
+          <p className="text-sm font-semibold tracking-tight text-white">Voltra Techno</p>
+          <p className="text-[11px] text-sidebar-foreground/60">Project Management</p>
         </div>
       </div>
 
@@ -45,7 +56,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
         <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/40">
           Menu
         </p>
-        {NAV.map((item) => {
+        {nav.map((item) => {
           const active =
             item.href === "/"
               ? pathname === "/"
@@ -72,9 +83,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
                 )}
               />
               {item.label}
-              {active && (
-                <span className="ml-auto size-1.5 rounded-full bg-sidebar-primary" />
-              )}
+              {active && <span className="ml-auto size-1.5 rounded-full bg-sidebar-primary" />}
             </Link>
           );
         })}
@@ -83,12 +92,12 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="border-t border-sidebar-border p-4">
         <div className="flex items-center gap-2.5 rounded-lg bg-sidebar-accent/50 px-3 py-2.5">
           <span className="flex size-8 items-center justify-center rounded-full bg-sidebar-primary/20 text-xs font-semibold text-sidebar-primary">
-            OW
+            {initials(name) || "U"}
           </span>
           <div className="min-w-0 leading-tight">
-            <p className="truncate text-xs font-medium text-white">Owner</p>
+            <p className="truncate text-xs font-medium text-white">{name}</p>
             <p className="truncate text-[11px] text-sidebar-foreground/50">
-              Single-user mode
+              {role === "admin" ? "Administrator" : "Karyawan"}
             </p>
           </div>
         </div>

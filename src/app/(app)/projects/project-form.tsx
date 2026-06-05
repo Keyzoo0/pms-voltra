@@ -73,6 +73,7 @@ export function ProjectForm({
   categories,
   roles,
   project,
+  canEditFinance = true,
 }: {
   mode: "create" | "edit";
   action: (prev: FormState, formData: FormData) => Promise<FormState>;
@@ -80,6 +81,7 @@ export function ProjectForm({
   categories: Option[];
   roles: Option[];
   project?: ProjectInitial;
+  canEditFinance?: boolean;
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<FormState, FormData>(
@@ -160,23 +162,25 @@ export function ProjectForm({
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>Klien</Label>
-                  <input type="hidden" name="clientId" value={clientId === "none" ? "" : clientId} />
-                  <Select value={clientId} onValueChange={setClientId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih klien" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">— Tanpa klien —</SelectItem>
-                      {clients.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {canEditFinance && (
+                  <div className="space-y-1.5">
+                    <Label>Klien</Label>
+                    <input type="hidden" name="clientId" value={clientId === "none" ? "" : clientId} />
+                    <Select value={clientId} onValueChange={setClientId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih klien" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Tanpa klien —</SelectItem>
+                        {clients.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <Label>Status</Label>
@@ -194,22 +198,22 @@ export function ProjectForm({
                   </Select>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="contractValue">Nilai Kontrak (IDR)</Label>
-                  <Input
-                    id="contractValue"
-                    name="contractValue"
-                    inputMode="numeric"
-                    value={contractValue}
-                    onChange={(e) =>
-                      setContractValue(e.target.value.replace(/[^0-9]/g, ""))
-                    }
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {formatIDR(value)}
-                  </p>
-                </div>
+                {canEditFinance && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="contractValue">Nilai Kontrak (IDR)</Label>
+                    <Input
+                      id="contractValue"
+                      name="contractValue"
+                      inputMode="numeric"
+                      value={contractValue}
+                      onChange={(e) =>
+                        setContractValue(e.target.value.replace(/[^0-9]/g, ""))
+                      }
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground">{formatIDR(value)}</p>
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <Label htmlFor="progress">Progress (%)</Label>

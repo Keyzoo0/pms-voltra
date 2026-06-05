@@ -1,9 +1,17 @@
-// Lightweight single-owner auth: a signed (HMAC-SHA256) session cookie.
-// Implemented with Web Crypto so it runs in both the Edge middleware and
-// Node server actions.
+// Multi-user auth primitives. Edge-safe (no DB, no bcrypt) so the proxy can
+// import it. Sessions are signed (HMAC-SHA256) cookies via Web Crypto.
 
 export const SESSION_COOKIE = "voltra_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
+export type SessionRole = "admin" | "employee";
+export type SessionPayload = {
+  uid: string; // "admin" or employee id
+  role: SessionRole;
+  name: string;
+  iat: number;
+  exp: number;
+};
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -12,17 +20,19 @@ function getSecret(): string {
   return process.env.AUTH_SECRET || "voltra-dev-secret-change-me-please";
 }
 
-function getPassword(): string {
-  return process.env.AUTH_PASSWORD || "voltra-admin";
+export function getAdminUsername(): string {
+  return process.env.ADMIN_USERNAME || "admin";
+}
+
+export function checkAdminCredentials(username: string, password: string): boolean {
+  const adminPass = process.env.AUTH_PASSWORD || "voltra-admin";
+  return username === getAdminUsername() && password === adminPass;
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function base64UrlToBytes(value: string): Uint8Array {
@@ -47,36 +57,43 @@ async function hmac(payload: string): Promise<string> {
   return bytesToBase64Url(new Uint8Array(signature));
 }
 
-export async function createSessionToken(): Promise<string> {
+export async function createSessionToken(data: {
+  uid: string;
+  role: SessionRole;
+  name: string;
+}): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  const payload = { sub: "owner", iat: now, exp: now + SESSION_TTL_SECONDS };
+  const payload: SessionPayload = {
+    ...data,
+    iat: now,
+    exp: now + SESSION_TTL_SECONDS,
+  };
   const payloadB64 = bytesToBase64Url(encoder.encode(JSON.stringify(payload)));
   const signature = await hmac(payloadB64);
   return `${payloadB64}.${signature}`;
 }
 
-export async function verifySessionToken(
+export async function readSessionToken(
   token: string | undefined | null,
-): Promise<boolean> {
-  if (!token) return false;
+): Promise<SessionPayload | null> {
+  if (!token) return null;
   const [payloadB64, signature] = token.split(".");
-  if (!payloadB64 || !signature) return false;
+  if (!payloadB64 || !signature) return null;
 
   const expected = await hmac(payloadB64);
-  if (expected !== signature) return false;
+  if (expected !== signature) return null;
 
   try {
-    const payload = JSON.parse(decoder.decode(base64UrlToBytes(payloadB64)));
-    if (typeof payload.exp !== "number") return false;
-    if (payload.exp < Math.floor(Date.now() / 1000)) return false;
-    return true;
+    const payload = JSON.parse(
+      decoder.decode(base64UrlToBytes(payloadB64)),
+    ) as SessionPayload;
+    if (typeof payload.exp !== "number") return null;
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (payload.role !== "admin" && payload.role !== "employee") return null;
+    return payload;
   } catch {
-    return false;
+    return null;
   }
-}
-
-export function verifyPassword(input: string): boolean {
-  return input === getPassword();
 }
 
 export const SESSION_COOKIE_OPTIONS = {

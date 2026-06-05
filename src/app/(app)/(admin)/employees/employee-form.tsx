@@ -28,6 +28,7 @@ import {
 type Option = { id: string; name: string };
 type EmployeeInitial = {
   name: string;
+  username: string | null;
   contact: string | null;
   status: string;
   joinedAt: Date | null;
@@ -106,20 +107,59 @@ export function EmployeeForm({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Role / Keahlian</CardTitle>
-            <CardDescription>Bisa lebih dari satu.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MultiChipField
-              name="roleIds"
-              options={roles}
-              initial={employee?.roleIds}
-              emptyText="Belum ada role. Tambah di Pengaturan."
-            />
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Role / Keahlian</CardTitle>
+              <CardDescription>Bisa lebih dari satu.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <MultiChipField
+                name="roleIds"
+                options={roles}
+                initial={employee?.roleIds}
+                emptyText="Belum ada role. Tambah di Pengaturan."
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Akun Login</CardTitle>
+              <CardDescription>
+                {mode === "create"
+                  ? "Isi untuk memberi karyawan akses login (opsional)."
+                  : "Kosongkan password jika tidak ingin mengubahnya."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  name="username"
+                  defaultValue={employee?.username ?? ""}
+                  placeholder="cth. rizky"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="password">
+                  {mode === "create" ? "Password" : "Reset Password"}
+                </Label>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  placeholder={
+                    mode === "create" ? "Min. 6 karakter" : "Kosongkan = tidak diubah"
+                  }
+                  autoComplete="new-password"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <div className="flex items-center justify-end gap-2">

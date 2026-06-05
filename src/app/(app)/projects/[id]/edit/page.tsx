@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { getProjectAccess, requireSession } from "@/lib/session";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProjectForm } from "../../project-form";
 import { updateProject } from "../../actions";
@@ -14,6 +15,11 @@ export default async function EditProjectPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const session = await requireSession();
+
+  const access = await getProjectAccess(id, session);
+  if (access !== "admin" && access !== "manager") redirect(`/projects/${id}`);
+  const isAdmin = access === "admin";
 
   const [project, clients, categories, roles] = await Promise.all([
     db.project.findUnique({
@@ -43,6 +49,7 @@ export default async function EditProjectPage({
       <ProjectForm
         mode="edit"
         action={action}
+        canEditFinance={isAdmin}
         clients={clients}
         categories={categories}
         roles={roles}
