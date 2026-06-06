@@ -99,6 +99,13 @@ export async function changeAdminPassword(
   return { ok: true };
 }
 
+// Roles & categories are listed in several forms (employee add/edit, project
+// add/edit, assignment dialog). Revalidate the whole tree so those forms pick
+// up additions/removals immediately instead of serving a cached list.
+function revalidateTaxonomy() {
+  revalidatePath("/", "layout");
+}
+
 export async function addCategory(
   _prev: FormState,
   formData: FormData,
@@ -109,14 +116,14 @@ export async function addCategory(
   const exists = await db.category.findUnique({ where: { name } });
   if (exists) return { error: "Kategori sudah ada." };
   await db.category.create({ data: { name } });
-  revalidatePath("/settings");
+  revalidateTaxonomy();
   return { ok: true };
 }
 
 export async function deleteCategory(id: string) {
   await requireAdmin();
   await db.category.delete({ where: { id } });
-  revalidatePath("/settings");
+  revalidateTaxonomy();
 }
 
 export async function addRole(
@@ -129,12 +136,12 @@ export async function addRole(
   const exists = await db.role.findUnique({ where: { name } });
   if (exists) return { error: "Role sudah ada." };
   await db.role.create({ data: { name } });
-  revalidatePath("/settings");
+  revalidateTaxonomy();
   return { ok: true };
 }
 
 export async function deleteRole(id: string) {
   await requireAdmin();
   await db.role.delete({ where: { id } });
-  revalidatePath("/settings");
+  revalidateTaxonomy();
 }
