@@ -8,8 +8,9 @@
 
 Voltra Techno PMS adalah sistem manajemen proyek berbasis web yang dirancang khusus untuk perusahaan jasa development teknologi. Sistem ini mencakup tiga pilar utama: manajemen proyek, manajemen SDM (karyawan & role), dan manajemen keuangan proyek.
 
-**Pengguna:** Single user (Owner/PM)
-**Cakupan bisnis:** Jasa pembuatan teknologi di bidang IoT, Robotika, Machine Learning, PLC, SCADA, dan development teknologi lainnya.
+**Pengguna:** Multi-peran — **Admin/Owner** (akses penuh) dan **Karyawan** (portal terbatas: lihat proyek yang ditugaskan & fee sendiri). Login via cookie sesi ber-tanda-tangan HMAC; password admin di-hash dengan bcrypt.
+**Cakupan bisnis:** Jasa pembuatan teknologi di bidang IoT, Robotika, Machine Learning, PLC, SCADA, Firmware, dan development teknologi lainnya.
+**Tambahan:** sistem dilengkapi **AI Assistant** (lihat 2.7) untuk analisa data sekaligus CRUD lewat percakapan.
 
 ---
 
@@ -202,6 +203,41 @@ Profit Perusahaan                               Rp 20.500.000
 | Kontak | Text | No HP / Email |
 | Alamat | Text | - |
 | Catatan | Long Text | Notes tambahan |
+
+---
+
+### 2.7 Modul AI Assistant (Voltra AI)
+
+Asisten cerdas berbasis LLM (ditenagai **Qwen** via Alibaba DashScope, API
+OpenAI-compatible) yang tertanam di aplikasi — khusus admin. Mampu membaca data
+nyata melalui *function calling* (tidak mengarang) dan melakukan aksi atas nama
+admin.
+
+**Kemampuan:**
+
+- **Analisa & query** — ringkasan portofolio + keuangan (overview), cari/saring
+  proyek per status atau nama, detail P&L per proyek.
+- **Rekomendasi karyawan** — menyarankan karyawan yang cocok untuk sebuah role,
+  diurutkan berdasarkan kecocokan keahlian dan beban proyek aktif.
+- **CRUD database via chat** — membuat, mengubah, dan menghapus **Proyek,
+  Klien, Karyawan**, mengubah status/progress proyek, serta **assign/lepas**
+  karyawan dari proyek. Untuk setiap aksi tulis/hapus, asisten **wajib meminta
+  konfirmasi** terlebih dahulu (mekanisme pertanyaan interaktif).
+- **Analisa file** — unggah gambar (model *vision*), PDF, Word (`.docx`),
+  Excel, CSV/JSON, atau file teks/kode; isinya diekstrak dan dianalisa.
+- **Pertanyaan interaktif (inquiry)** — saat data kurang/ambigu, asisten
+  bertanya balik dengan opsi pilihan, bukan menebak.
+- **Recent chat** — percakapan tersimpan permanen (riwayat dapat dibuka kembali).
+
+**Catatan teknis:**
+
+- Backend bersifat OpenAI-compatible (`OPENAI_BASE_URL` / `OPENAI_API_KEY` /
+  `OPENAI_MODEL`), sehingga provider bisa diganti (DashScope/Qwen, OpenRouter,
+  Groq, dll) lewat environment variable tanpa ubah kode.
+- Model teks default `qwen-plus`; analisa gambar memakai model *vision*
+  `qwen3-vl-plus` secara otomatis ketika ada lampiran gambar.
+- Riwayat percakapan disimpan di tabel `AssistantChat` & `AssistantMessage`
+  (di-scope per pemilik/owner).
 
 ---
 
@@ -484,28 +520,31 @@ Notion digunakan sebagai task management tool untuk karyawan. Integrasi via Noti
 
 ---
 
-## 8. Rekomendasi Tech Stack
+## 8. Tech Stack (Implementasi Aktual)
 
 ### Frontend
-- **Framework:** Next.js (React) dengan TypeScript
-- **UI Library:** Tailwind CSS + shadcn/ui
-- **State Management:** Zustand atau React Query
-- **Charts:** Recharts (untuk dashboard & laporan)
-- **Export Spreadsheet:** SheetJS (xlsx)
+- **Framework:** Next.js 16 (App Router, Turbopack) + React 19 + TypeScript
+- **UI Library:** Tailwind CSS v4 + komponen ala shadcn/ui (Radix UI)
+- **State:** React hooks + Server Actions / `useActionState`
+- **Charts:** Recharts (dashboard & laporan)
+- **Notifikasi:** Sonner
+- **Export Spreadsheet:** ExcelJS (`.xlsx`)
 
 ### Backend
-- **Framework:** Next.js API Routes (fullstack) atau terpisah dengan Express/Fastify
-- **Database:** PostgreSQL (via Supabase untuk kemudahan)
-- **ORM:** Prisma
-- **Authentication:** Supabase Auth (single user, cukup email/password)
+- **Framework:** Next.js Route Handlers + Server Actions (fullstack)
+- **Database:** PostgreSQL (Neon)
+- **ORM:** Prisma 7 dengan driver adapter `@prisma/adapter-pg`
+- **Authentication:** Cookie sesi ber-tanda-tangan HMAC (Web Crypto) + `bcryptjs` untuk password admin
+- **Penyimpanan file:** Vercel Blob (logo, bukti pembayaran/fee, gambar AI)
 
-### Integrasi
-- **Notion API:** @notionhq/client (official SDK)
-- **Spreadsheet Export:** SheetJS / ExcelJS
+### AI Assistant
+- **Model:** Qwen via Alibaba DashScope (API OpenAI-compatible) — `qwen-plus` (teks) & `qwen3-vl-plus` (vision)
+- **Parsing file:** `pdf-parse` (PDF), `mammoth` (Word), ExcelJS (Excel)
+- **Mekanisme:** *function calling* (tools baca/tulis) + loop tool-call
 
 ### Deployment
-- **Hosting:** Vercel (frontend + API) atau VPS (self-hosted)
-- **Database:** Supabase (managed PostgreSQL)
+- **Hosting:** Vercel
+- **Database:** Neon (managed PostgreSQL, serverless)
 
 ---
 

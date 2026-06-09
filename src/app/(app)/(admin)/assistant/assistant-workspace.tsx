@@ -243,11 +243,11 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
   }
 
   return (
-    <div className="flex h-[calc(100vh-12rem)] min-h-[30rem] overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className="flex h-[calc(100vh-9rem)] min-h-[30rem] overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       {/* Sidebar: recent chats */}
       <aside
         className={cn(
-          "absolute z-20 flex h-[calc(100vh-12rem)] w-64 shrink-0 flex-col border-r border-border/60 bg-card md:static md:z-auto md:h-auto",
+          "absolute z-20 flex h-[calc(100vh-9rem)] w-64 shrink-0 flex-col border-r border-border/60 bg-card md:static md:z-auto md:h-auto",
           showSidebar ? "flex" : "hidden",
           historyCollapsed ? "md:hidden" : "md:flex",
         )}
