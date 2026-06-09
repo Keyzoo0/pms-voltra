@@ -9,8 +9,11 @@ import {
   ExternalLink,
   FileSpreadsheet,
   FileText,
+  GitBranch,
+  MessageCircle,
   Package,
   Pencil,
+  Phone,
   Receipt,
   Trash2,
   Users,
@@ -30,7 +33,7 @@ import {
   type ProjectStatus,
   type PurchaseStatus,
 } from "@/lib/constants";
-import { cn, formatDate, formatIDR, toNum } from "@/lib/utils";
+import { cn, externalUrl, formatDate, formatIDR, toNum, waLink } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -202,16 +205,43 @@ export default async function ProjectDetailPage({
               )}
             </div>
             {project.client && isAdmin && (
-              <Link
-                href={`/clients/${project.client.id}`}
-                className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary"
-              >
-                <Building2 className="size-3.5" />
-                {project.client.name}
-              </Link>
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <Link
+                  href={`/clients/${project.client.id}`}
+                  className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary"
+                >
+                  <Building2 className="size-3.5" />
+                  {project.client.name}
+                </Link>
+                {waLink(project.client.contact) && (
+                  <a
+                    href={waLink(project.client.contact)!}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-emerald-600 hover:underline dark:text-emerald-400"
+                  >
+                    <Phone className="size-3.5" />
+                    {project.client.contact}
+                  </a>
+                )}
+              </div>
             )}
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {externalUrl(project.repoUrl) && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={externalUrl(project.repoUrl)!} target="_blank" rel="noreferrer">
+                  <GitBranch /> Repo
+                </a>
+              </Button>
+            )}
+            {externalUrl(project.waGroupUrl) && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={externalUrl(project.waGroupUrl)!} target="_blank" rel="noreferrer">
+                  <MessageCircle /> Grup WA
+                </a>
+              </Button>
+            )}
             {isAdmin && (
               <Button variant="outline" size="sm" asChild>
                 <a href={`/api/export/project?id=${project.id}`}>

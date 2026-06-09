@@ -91,3 +91,26 @@ export function toNum(value: unknown): number {
   const n = Number(value as string);
   return Number.isFinite(n) ? n : 0;
 }
+
+/**
+ * Build a wa.me link from an Indonesian phone number, normalizing the prefix
+ * to country code 62. Returns null if the value doesn't look like a phone
+ * (e.g. an email or too few digits), so callers can skip rendering a link.
+ */
+export function waLink(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  let digits = phone.replace(/\D/g, "");
+  if (digits.length < 8) return null;
+  if (digits.startsWith("620")) digits = "62" + digits.slice(3);
+  else if (digits.startsWith("0")) digits = "62" + digits.slice(1);
+  else if (digits.startsWith("8")) digits = "62" + digits;
+  return `https://wa.me/${digits}`;
+}
+
+/** Ensure a URL has a scheme so it opens externally; null if empty. */
+export function externalUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}

@@ -132,6 +132,8 @@ export async function createProject(
       status: parseStatus(formData.get("status")),
       progress,
       notes: str(formData.get("notes")) || null,
+      repoUrl: str(formData.get("repoUrl")) || null,
+      waGroupUrl: str(formData.get("waGroupUrl")) || null,
       categories: { connect: categoryIds.map((id) => ({ id })) },
       requiredRoles: { connect: roleIds.map((id) => ({ id })) },
       paymentTerms: {
@@ -180,6 +182,8 @@ export async function updateProject(
       status: parseStatus(formData.get("status")),
       progress,
       notes: str(formData.get("notes")) || null,
+      repoUrl: str(formData.get("repoUrl")) || null,
+      waGroupUrl: str(formData.get("waGroupUrl")) || null,
       categories: { set: categoryIds.map((cid) => ({ id: cid })) },
       requiredRoles: { set: roleIds.map((rid) => ({ id: rid })) },
       // Financial fields are admin-only.

@@ -64,6 +64,8 @@ export default async function EditProjectPage({
           status: project.status,
           progress: project.progress,
           notes: project.notes,
+          repoUrl: project.repoUrl,
+          waGroupUrl: project.waGroupUrl,
           categoryIds: project.categories.map((c) => c.id),
           roleIds: project.requiredRoles.map((r) => r.id),
         }}

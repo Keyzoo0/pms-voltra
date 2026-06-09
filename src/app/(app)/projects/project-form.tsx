@@ -38,6 +38,8 @@ type ProjectInitial = {
   status: string;
   progress: number;
   notes: string | null;
+  repoUrl: string | null;
+  waGroupUrl: string | null;
   categoryIds: string[];
   roleIds: string[];
 };
@@ -249,6 +251,31 @@ export function ProjectForm({
                     name="deadline"
                     type="date"
                     defaultValue={toDateInputValue(project?.deadline)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="repoUrl">Repository GitHub</Label>
+                  <Input
+                    id="repoUrl"
+                    name="repoUrl"
+                    type="url"
+                    inputMode="url"
+                    defaultValue={project?.repoUrl ?? ""}
+                    placeholder="https://github.com/org/repo"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="waGroupUrl">Grup WhatsApp</Label>
+                  <Input
+                    id="waGroupUrl"
+                    name="waGroupUrl"
+                    type="url"
+                    inputMode="url"
+                    defaultValue={project?.waGroupUrl ?? ""}
+                    placeholder="https://chat.whatsapp.com/…"
                   />
                 </div>
               </div>

@@ -116,6 +116,8 @@ model Project {
   status          ProjectStatus           @default(inquiry)
   progress        Int                     @default(0)
   notes           String?
+  repoUrl         String?
+  waGroupUrl      String?
   categories      Category[]              @relation("ProjectCategories")
   requiredRoles   Role[]                  @relation("ProjectRequiredRoles")
   assignments     ProjectAssignment[]
