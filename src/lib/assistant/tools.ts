@@ -384,6 +384,162 @@ export const TOOL_DECLARATIONS = [
       },
     },
   },
+  {
+    name: "get_employee",
+    description:
+      "Detail lengkap satu karyawan: role, status, kontak, rekening, riwayat penugasan proyek beserta fee & statusnya, dan total fee. Resolusi via employeeId atau employeeName.",
+    parameters: {
+      type: "object",
+      properties: { employeeId: { type: "string" }, employeeName: { type: "string" } },
+    },
+  },
+  {
+    name: "add_item",
+    description:
+      "Tambah item kebutuhan material (BOM) ke sebuah proyek. Total harga otomatis qty × harga satuan.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        projectName: { type: "string" },
+        name: { type: "string", description: "Nama item/material (wajib)." },
+        quantity: { type: "integer", description: "Jumlah (default 1)." },
+        unitPrice: { type: "number", description: "Harga satuan IDR (default 0)." },
+        link: { type: "string", description: "Link toko/marketplace (opsional)." },
+        source: {
+          type: "string",
+          enum: ["company", "client", "reimburse"],
+          description: "Sumber dana: company=dibeli perusahaan (pengeluaran), client=dari klien, reimburse.",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_item",
+    description:
+      "Ubah item BOM pada sebuah proyek (cari item berdasarkan namanya di proyek itu). Bisa ubah qty, harga, sumber, status beli, atau nama.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        projectName: { type: "string" },
+        itemName: { type: "string", description: "Nama item yang dicari (wajib)." },
+        newName: { type: "string" },
+        quantity: { type: "integer" },
+        unitPrice: { type: "number" },
+        link: { type: "string" },
+        source: { type: "string", enum: ["company", "client", "reimburse"] },
+        purchaseStatus: {
+          type: "string",
+          enum: ["not_purchased", "purchased", "reimbursed"],
+          description: "Status pembelian.",
+        },
+      },
+      required: ["itemName"],
+    },
+  },
+  {
+    name: "delete_item",
+    description: "Hapus item BOM dari proyek (cari berdasarkan nama item). WAJIB konfirmasi dulu.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        projectName: { type: "string" },
+        itemName: { type: "string" },
+      },
+      required: ["itemName"],
+    },
+  },
+  {
+    name: "add_cost",
+    description: "Tambah biaya tambahan (ongkir, fabrikasi, admin, dll) ke sebuah proyek.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        projectName: { type: "string" },
+        name: { type: "string", description: "Nama biaya (wajib)." },
+        amount: { type: "number", description: "Nominal IDR (wajib)." },
+      },
+      required: ["name", "amount"],
+    },
+  },
+  {
+    name: "delete_cost",
+    description: "Hapus biaya tambahan dari proyek (cari berdasarkan nama biaya). WAJIB konfirmasi dulu.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        projectName: { type: "string" },
+        costName: { type: "string" },
+      },
+      required: ["costName"],
+    },
+  },
+  {
+    name: "add_payment_term",
+    description:
+      "Tambah termin pembayaran ke proyek. Nominal otomatis = persentase × nilai kontrak.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        projectName: { type: "string" },
+        termName: { type: "string", description: "Nama termin, mis. 'DP 50%' (wajib)." },
+        percentage: { type: "number", description: "Persentase dari nilai kontrak (wajib)." },
+      },
+      required: ["termName", "percentage"],
+    },
+  },
+  {
+    name: "set_payment_term_status",
+    description:
+      "Tandai termin pembayaran lunas/belum (cari termin berdasarkan namanya di proyek itu). paid = klien sudah bayar (paidAt diisi otomatis).",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        projectName: { type: "string" },
+        termName: { type: "string", description: "Nama termin (boleh sebagian)." },
+        status: { type: "string", enum: ["paid", "unpaid"] },
+      },
+      required: ["termName", "status"],
+    },
+  },
+  {
+    name: "delete_payment_term",
+    description: "Hapus termin pembayaran dari proyek (berdampak finansial). WAJIB konfirmasi dulu.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        projectName: { type: "string" },
+        termName: { type: "string" },
+      },
+      required: ["termName"],
+    },
+  },
+  {
+    name: "create_role",
+    description: "Tambah role/keahlian baru ke taxonomy (langsung tersedia di semua form & tool).",
+    parameters: {
+      type: "object",
+      properties: { name: { type: "string", description: "Nama role baru." } },
+      required: ["name"],
+    },
+  },
+  {
+    name: "create_category",
+    description: "Tambah kategori proyek baru ke taxonomy.",
+    parameters: {
+      type: "object",
+      properties: { name: { type: "string", description: "Nama kategori baru." } },
+      required: ["name"],
+    },
+  },
 ] as const;
 
 // ── execution ────────────────────────────────────────────────
@@ -435,6 +591,28 @@ export async function executeTool(name: string, args: Args): Promise<unknown> {
       return updateAssignmentTool(args);
     case "unassign_employee":
       return unassignEmployeeTool(args);
+    case "get_employee":
+      return getEmployeeTool(args);
+    case "add_item":
+      return addItemTool(args);
+    case "update_item":
+      return updateItemTool(args);
+    case "delete_item":
+      return deleteItemTool(args);
+    case "add_cost":
+      return addCostTool(args);
+    case "delete_cost":
+      return deleteCostTool(args);
+    case "add_payment_term":
+      return addPaymentTermTool(args);
+    case "set_payment_term_status":
+      return setPaymentTermStatusTool(args);
+    case "delete_payment_term":
+      return deletePaymentTermTool(args);
+    case "create_role":
+      return createTaxonomyTool(args, "role");
+    case "create_category":
+      return createTaxonomyTool(args, "category");
     case "ask_user":
       // Normally intercepted by the run loop; handled by the UI.
       return { note: "Pertanyaan diteruskan ke pengguna." };
@@ -1119,4 +1297,236 @@ async function unassignEmployeeTool(args: Args) {
   touch();
   if (res.count === 0) return { error: `${emp.name} tidak ditugaskan di proyek ${proj.name}.` };
   return { ok: true, project: proj.name, employee: emp.name, removed: res.count };
+}
+
+// ── Employee detail ───────────────────────────────────────────
+async function getEmployeeTool(args: Args) {
+  const ref = await resolveEmployee(args);
+  if (!ref) return { error: "Karyawan tidak ditemukan." };
+  const e = await db.employee.findUnique({
+    where: { id: ref.id },
+    include: {
+      roles: { select: { name: true } },
+      assignments: {
+        include: {
+          project: { select: { id: true, name: true, status: true } },
+          role: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+  if (!e) return { error: "Karyawan tidak ditemukan." };
+  const totalFee = e.assignments.reduce((s, a) => s + toNum(a.fee), 0);
+  const feePaid = e.assignments
+    .filter((a) => a.feeStatus === "paid")
+    .reduce((s, a) => s + toNum(a.fee), 0);
+  return {
+    id: e.id,
+    name: e.name,
+    url: `/employees/${e.id}`,
+    status: e.status,
+    roles: e.roles.map((r) => r.name),
+    contact: e.contact,
+    bank: e.bankName ? `${e.bankName} ${e.bankAccount ?? ""}`.trim() : null,
+    hasLoginAccount: !!e.username,
+    joinedAt: iso(e.joinedAt),
+    totalFee,
+    feePaid,
+    feePending: totalFee - feePaid,
+    assignments: e.assignments.map((a) => ({
+      project: a.project.name,
+      projectStatus: a.project.status,
+      projectUrl: `/projects/${a.project.id}`,
+      role: a.role?.name ?? null,
+      isManager: a.isManager,
+      fee: toNum(a.fee),
+      feeStatus: a.feeStatus,
+    })),
+  };
+}
+
+// ── BOM & cost tools ──────────────────────────────────────────
+const ITEM_SOURCES = ["company", "client", "reimburse"] as const;
+const PURCHASE_STATUSES = ["not_purchased", "purchased", "reimbursed"] as const;
+
+async function findItem(projectId: string, itemName: string) {
+  return db.projectItem.findFirst({
+    where: { projectId, name: { contains: itemName, mode: "insensitive" } },
+  });
+}
+
+async function addItemTool(args: Args) {
+  const proj = await resolveProject(args);
+  if (!proj) return { error: "Proyek tidak ditemukan." };
+  const name = s(args, "name");
+  if (!name) return { error: "Nama item wajib diisi." };
+  const quantity = Math.max(1, Math.round(Number(args.quantity) || 1));
+  const unitPrice = Number(args.unitPrice) || 0;
+  const source = (ITEM_SOURCES as readonly string[]).includes(String(args.source))
+    ? (String(args.source) as (typeof ITEM_SOURCES)[number])
+    : "company";
+  await db.projectItem.create({
+    data: {
+      project: { connect: { id: proj.id } },
+      name,
+      quantity,
+      unitPrice,
+      totalPrice: quantity * unitPrice,
+      link: s(args, "link") || null,
+      source,
+    },
+  });
+  touch();
+  return { ok: true, project: proj.name, item: name, quantity, unitPrice, totalPrice: quantity * unitPrice, source, url: `/projects/${proj.id}` };
+}
+
+async function updateItemTool(args: Args) {
+  const proj = await resolveProject(args);
+  if (!proj) return { error: "Proyek tidak ditemukan." };
+  const item = await findItem(proj.id, s(args, "itemName"));
+  if (!item) return { error: `Item "${s(args, "itemName")}" tidak ditemukan di proyek ${proj.name}.` };
+
+  const quantity =
+    args.quantity != null && Number.isFinite(Number(args.quantity))
+      ? Math.max(1, Math.round(Number(args.quantity)))
+      : item.quantity;
+  const unitPrice =
+    args.unitPrice != null && Number.isFinite(Number(args.unitPrice))
+      ? Number(args.unitPrice)
+      : toNum(item.unitPrice);
+
+  await db.projectItem.update({
+    where: { id: item.id },
+    data: {
+      name: s(args, "newName") || item.name,
+      quantity,
+      unitPrice,
+      totalPrice: quantity * unitPrice,
+      ...(typeof args.link === "string" ? { link: args.link.trim() || null } : {}),
+      ...((ITEM_SOURCES as readonly string[]).includes(String(args.source))
+        ? { source: String(args.source) as (typeof ITEM_SOURCES)[number] }
+        : {}),
+      ...((PURCHASE_STATUSES as readonly string[]).includes(String(args.purchaseStatus))
+        ? { purchaseStatus: String(args.purchaseStatus) as (typeof PURCHASE_STATUSES)[number] }
+        : {}),
+    },
+  });
+  touch();
+  return { ok: true, project: proj.name, item: s(args, "newName") || item.name, quantity, unitPrice, totalPrice: quantity * unitPrice };
+}
+
+async function deleteItemTool(args: Args) {
+  const proj = await resolveProject(args);
+  if (!proj) return { error: "Proyek tidak ditemukan." };
+  const item = await findItem(proj.id, s(args, "itemName"));
+  if (!item) return { error: `Item "${s(args, "itemName")}" tidak ditemukan di proyek ${proj.name}.` };
+  await db.projectItem.delete({ where: { id: item.id } });
+  touch();
+  return { ok: true, project: proj.name, deleted: item.name };
+}
+
+async function addCostTool(args: Args) {
+  const proj = await resolveProject(args);
+  if (!proj) return { error: "Proyek tidak ditemukan." };
+  const name = s(args, "name");
+  if (!name) return { error: "Nama biaya wajib diisi." };
+  const amount = Number(args.amount) || 0;
+  await db.projectAdditionalCost.create({
+    data: { project: { connect: { id: proj.id } }, name, amount },
+  });
+  touch();
+  return { ok: true, project: proj.name, cost: name, amount, url: `/projects/${proj.id}` };
+}
+
+async function deleteCostTool(args: Args) {
+  const proj = await resolveProject(args);
+  if (!proj) return { error: "Proyek tidak ditemukan." };
+  const cost = await db.projectAdditionalCost.findFirst({
+    where: { projectId: proj.id, name: { contains: s(args, "costName"), mode: "insensitive" } },
+  });
+  if (!cost) return { error: `Biaya "${s(args, "costName")}" tidak ditemukan di proyek ${proj.name}.` };
+  await db.projectAdditionalCost.delete({ where: { id: cost.id } });
+  touch();
+  return { ok: true, project: proj.name, deleted: cost.name, amount: toNum(cost.amount) };
+}
+
+// ── Payment-term tools ────────────────────────────────────────
+async function findTerm(projectId: string, termName: string) {
+  return db.projectPaymentTerm.findFirst({
+    where: { projectId, termName: { contains: termName, mode: "insensitive" } },
+    orderBy: { sortOrder: "asc" },
+  });
+}
+
+async function addPaymentTermTool(args: Args) {
+  const proj = await resolveProject(args);
+  if (!proj) return { error: "Proyek tidak ditemukan." };
+  const termName = s(args, "termName");
+  if (!termName) return { error: "Nama termin wajib diisi." };
+  const percentage = Number(args.percentage) || 0;
+  const full = await db.project.findUnique({
+    where: { id: proj.id },
+    select: { contractValue: true, _count: { select: { paymentTerms: true } } },
+  });
+  const contractValue = toNum(full?.contractValue);
+  const amount = (percentage / 100) * contractValue;
+  await db.projectPaymentTerm.create({
+    data: {
+      project: { connect: { id: proj.id } },
+      termName,
+      percentage,
+      amount,
+      sortOrder: full?._count.paymentTerms ?? 0,
+    },
+  });
+  touch();
+  return { ok: true, project: proj.name, termName, percentage, amount, url: `/projects/${proj.id}` };
+}
+
+async function setPaymentTermStatusTool(args: Args) {
+  const proj = await resolveProject(args);
+  if (!proj) return { error: "Proyek tidak ditemukan." };
+  const term = await findTerm(proj.id, s(args, "termName"));
+  if (!term) return { error: `Termin "${s(args, "termName")}" tidak ditemukan di proyek ${proj.name}.` };
+  const paid = args.status === "paid";
+  await db.projectPaymentTerm.update({
+    where: { id: term.id },
+    data: { status: paid ? "paid" : "unpaid", paidAt: paid ? new Date() : null },
+  });
+  touch();
+  return {
+    ok: true,
+    project: proj.name,
+    termName: term.termName,
+    amount: toNum(term.amount),
+    status: paid ? "paid" : "unpaid",
+  };
+}
+
+async function deletePaymentTermTool(args: Args) {
+  const proj = await resolveProject(args);
+  if (!proj) return { error: "Proyek tidak ditemukan." };
+  const term = await findTerm(proj.id, s(args, "termName"));
+  if (!term) return { error: `Termin "${s(args, "termName")}" tidak ditemukan di proyek ${proj.name}.` };
+  await db.projectPaymentTerm.delete({ where: { id: term.id } });
+  touch();
+  return { ok: true, project: proj.name, deleted: term.termName, amount: toNum(term.amount) };
+}
+
+// ── Taxonomy tools ────────────────────────────────────────────
+async function createTaxonomyTool(args: Args, kind: "role" | "category") {
+  const name = s(args, "name");
+  if (!name) return { error: `Nama ${kind === "role" ? "role" : "kategori"} wajib diisi.` };
+  if (kind === "role") {
+    const exists = await db.role.findUnique({ where: { name } });
+    if (exists) return { error: `Role "${name}" sudah ada.` };
+    await db.role.create({ data: { name } });
+  } else {
+    const exists = await db.category.findUnique({ where: { name } });
+    if (exists) return { error: `Kategori "${name}" sudah ada.` };
+    await db.category.create({ data: { name } });
+  }
+  touch();
+  return { ok: true, created: name, kind };
 }

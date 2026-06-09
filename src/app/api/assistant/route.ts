@@ -5,7 +5,7 @@ import { AssistantError, runAssistant, type Attachment, type ChatMessage } from 
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 180;
 
 function sanitizeAttachments(raw: unknown): Attachment[] {
   if (!Array.isArray(raw)) return [];

@@ -2,17 +2,18 @@ import { TOOL_DECLARATIONS, executeTool } from "./tools";
 import {
   AssistantError,
   asQuestion,
+  buildSystemPrompt,
   MAX_STEPS,
-  SYSTEM_PROMPT,
   type AssistantResult,
   type Attachment,
   type ChatMessage,
 } from "./shared";
 
 /**
- * OpenAI-compatible chat-completions backend (Qwen via DashScope, OpenRouter,
- * Groq, etc.). Supports tool calling, the ask_user interactive question flow,
- * document text context, and image (vision) input.
+ * Qwen execution engine (OpenAI-compatible chat completions via DashScope).
+ * Features: multi-round tool loop, parallel tool calls, transient-error
+ * retries with backoff, tool-result compaction, vision-model switching, and
+ * the ask_user interactive-question flow.
  * Env: OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL, OPENAI_VISION_MODEL.
  */
 
@@ -24,6 +25,8 @@ const TOOLS = TOOL_DECLARATIONS.map((d) => ({
     parameters: "parameters" in d ? d.parameters : { type: "object", properties: {} },
   },
 }));
+
+const MAX_TOOL_RESULT_CHARS = 24_000;
 
 type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
 type ContentPart =
@@ -57,32 +60,71 @@ function userContent(m: ChatMessage): string | ContentPart[] {
   return parts;
 }
 
+function compactResult(result: unknown): string {
+  let json: string;
+  try {
+    json = JSON.stringify({ result });
+  } catch {
+    json = JSON.stringify({ result: String(result) });
+  }
+  if (json.length > MAX_TOOL_RESULT_CHARS) {
+    json =
+      json.slice(0, MAX_TOOL_RESULT_CHARS) +
+      `…"} [hasil dipotong — terlalu besar; persempit query (filter/limit) bila butuh detail lebih]`;
+  }
+  return json;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function callChat(model: string, messages: OAMessage[]) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new AssistantError("OPENAI_API_KEY belum dikonfigurasi di server.", "no_key");
 
-  const res = await fetch(`${baseUrl()}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${key}`,
-      "HTTP-Referer": process.env.OPENAI_REFERER || "https://pms-voltra.vercel.app",
-      "X-Title": "Voltra PMS",
-    },
-    body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: "auto", temperature: 0.4 }),
-  });
+  let lastErr: AssistantError | null = null;
+  for (let attempt = 0; attempt <= 2; attempt++) {
+    if (attempt > 0) await sleep(attempt === 1 ? 1000 : 3000);
 
-  const json = await res.json().catch(() => null);
-  if (!res.ok) {
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl()}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${key}`,
+          "HTTP-Referer": process.env.OPENAI_REFERER || "https://pms-voltra.vercel.app",
+          "X-Title": "Voltra PMS",
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          tools: TOOLS,
+          tool_choice: "auto",
+          parallel_tool_calls: true,
+          temperature: 0.3,
+        }),
+      });
+    } catch {
+      lastErr = new AssistantError("Tidak bisa menghubungi penyedia AI (jaringan).", "upstream");
+      continue;
+    }
+
+    const json = await res.json().catch(() => null);
+    if (res.ok) {
+      const choice = json?.choices?.[0]?.message;
+      if (!choice) throw new AssistantError("Model tidak mengembalikan jawaban.", "upstream");
+      return choice as { content: string | null; tool_calls?: ToolCall[] };
+    }
+
     const e = json?.error;
     const msg =
       (typeof e === "string" ? e : e?.message) ||
       `Provider error (${res.status}). Periksa OPENAI_BASE_URL / OPENAI_API_KEY / OPENAI_MODEL.`;
-    throw new AssistantError(typeof msg === "string" ? msg : JSON.stringify(msg), "upstream");
+    lastErr = new AssistantError(typeof msg === "string" ? msg : JSON.stringify(msg), "upstream");
+    // Retry only transient failures (rate limit / server side).
+    if (res.status !== 429 && res.status < 500) break;
   }
-  const choice = json?.choices?.[0]?.message;
-  if (!choice) throw new AssistantError("Model tidak mengembalikan jawaban.", "upstream");
-  return choice as { content: string | null; tool_calls?: ToolCall[] };
+  throw lastErr ?? new AssistantError("Gagal menghubungi penyedia AI.", "upstream");
 }
 
 export async function runOpenAICompatible(history: ChatMessage[]): Promise<AssistantResult> {
@@ -90,9 +132,9 @@ export async function runOpenAICompatible(history: ChatMessage[]): Promise<Assis
   const hasImage = usable.some((m) => (m.attachments ?? []).some((a) => a.kind === "image"));
   const model = hasImage
     ? process.env.OPENAI_VISION_MODEL || "qwen3-vl-plus"
-    : process.env.OPENAI_MODEL || "qwen-plus";
+    : process.env.OPENAI_MODEL || "qwen3.7-plus";
 
-  const messages: OAMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+  const messages: OAMessage[] = [{ role: "system", content: buildSystemPrompt() }];
   for (const m of usable) {
     if (m.role === "user") messages.push({ role: "user", content: userContent(m) });
     else messages.push({ role: "assistant", content: m.content });
@@ -125,27 +167,32 @@ export async function runOpenAICompatible(history: ChatMessage[]): Promise<Assis
     }
 
     messages.push({ role: "assistant", content: choice.content ?? "", tool_calls: calls });
-    for (const call of calls) {
-      toolsUsed.push(call.function.name);
-      let args: Record<string, unknown> = {};
-      try {
-        args = JSON.parse(call.function.arguments || "{}");
-      } catch {
-        args = {};
-      }
-      let result: unknown;
-      try {
-        result = await executeTool(call.function.name, args);
-      } catch (e) {
-        result = { error: e instanceof Error ? e.message : String(e) };
-      }
-      messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify({ result }) });
-    }
+    // Execute independent calls of one round in parallel.
+    const results = await Promise.all(
+      calls.map(async (call) => {
+        toolsUsed.push(call.function.name);
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.function.arguments || "{}");
+        } catch {
+          args = {};
+        }
+        try {
+          return await executeTool(call.function.name, args);
+        } catch (e) {
+          return { error: e instanceof Error ? e.message : String(e) };
+        }
+      }),
+    );
+    calls.forEach((call, i) => {
+      messages.push({ role: "tool", tool_call_id: call.id, content: compactResult(results[i]) });
+    });
   }
 
   return {
     type: "answer",
-    reply: "Permintaan ini butuh terlalu banyak langkah. Coba persempit pertanyaannya.",
+    reply:
+      "Permintaan ini butuh terlalu banyak langkah dalam satu giliran. Sebagian mungkin sudah dieksekusi — cek hasilnya, lalu lanjutkan dengan permintaan yang lebih spesifik.",
     toolsUsed,
   };
 }
