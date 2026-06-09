@@ -1,10 +1,19 @@
 import { TOOL_DECLARATIONS, executeTool } from "./tools";
-import { AssistantError, MAX_STEPS, SYSTEM_PROMPT, type ChatMessage } from "./shared";
+import {
+  AssistantError,
+  asQuestion,
+  MAX_STEPS,
+  SYSTEM_PROMPT,
+  type AssistantResult,
+  type Attachment,
+  type ChatMessage,
+} from "./shared";
 
 /**
- * OpenAI-compatible chat-completions backend (works with Qwen, Llama, etc. via
- * OpenRouter, Alibaba DashScope, Groq, Together, and similar gateways).
- * Configured with: OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL.
+ * OpenAI-compatible chat-completions backend (Qwen via DashScope, OpenRouter,
+ * Groq, etc.). Supports tool calling, the ask_user interactive question flow,
+ * document text context, and image (vision) input.
+ * Env: OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL, OPENAI_VISION_MODEL.
  */
 
 const TOOLS = TOOL_DECLARATIONS.map((d) => ({
@@ -17,44 +26,57 @@ const TOOLS = TOOL_DECLARATIONS.map((d) => ({
 }));
 
 type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
 type OAMessage =
-  | { role: "system" | "user"; content: string }
+  | { role: "system" | "user"; content: string | ContentPart[] }
   | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
   | { role: "tool"; tool_call_id: string; content: string };
 
 function baseUrl(): string {
-  const raw = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-  return raw.replace(/\/+$/, "");
+  return (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
 }
 
-async function callChat(messages: OAMessage[]) {
+function userContent(m: ChatMessage): string | ContentPart[] {
+  const atts = m.attachments ?? [];
+  const docs = atts.filter((a): a is Extract<Attachment, { kind: "document" }> => a.kind === "document");
+  const images = atts.filter((a): a is Extract<Attachment, { kind: "image" }> => a.kind === "image");
+
+  let text = m.content ?? "";
+  for (const d of docs) {
+    text += `\n\n--- Dokumen terlampir: ${d.name} ---\n${d.text}\n--- akhir dokumen ---`;
+  }
+
+  if (images.length === 0) return text || "(tanpa teks)";
+
+  const parts: ContentPart[] = [
+    { type: "text", text: text.trim() || "Tolong analisa gambar terlampir." },
+  ];
+  for (const img of images) parts.push({ type: "image_url", image_url: { url: img.url } });
+  return parts;
+}
+
+async function callChat(model: string, messages: OAMessage[]) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new AssistantError("OPENAI_API_KEY belum dikonfigurasi di server.", "no_key");
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const res = await fetch(`${baseUrl()}/chat/completions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${key}`,
-      // Optional headers some gateways (e.g. OpenRouter) like to see.
       "HTTP-Referer": process.env.OPENAI_REFERER || "https://pms-voltra.vercel.app",
       "X-Title": "Voltra PMS",
     },
-    body: JSON.stringify({
-      model,
-      messages,
-      tools: TOOLS,
-      tool_choice: "auto",
-      temperature: 0.4,
-    }),
+    body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: "auto", temperature: 0.4 }),
   });
 
   const json = await res.json().catch(() => null);
   if (!res.ok) {
+    const e = json?.error;
     const msg =
-      json?.error?.message ||
-      json?.error ||
+      (typeof e === "string" ? e : e?.message) ||
       `Provider error (${res.status}). Periksa OPENAI_BASE_URL / OPENAI_API_KEY / OPENAI_MODEL.`;
     throw new AssistantError(typeof msg === "string" ? msg : JSON.stringify(msg), "upstream");
   }
@@ -63,24 +85,43 @@ async function callChat(messages: OAMessage[]) {
   return choice as { content: string | null; tool_calls?: ToolCall[] };
 }
 
-export async function runOpenAICompatible(
-  history: ChatMessage[],
-): Promise<{ reply: string; toolsUsed: string[] }> {
-  const messages: OAMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
-    ...history
-      .filter((m) => m.content.trim())
-      .map((m) => ({ role: m.role === "assistant" ? ("assistant" as const) : ("user" as const), content: m.content })),
-  ];
+export async function runOpenAICompatible(history: ChatMessage[]): Promise<AssistantResult> {
+  const usable = history.filter((m) => m.content.trim() || (m.attachments?.length ?? 0) > 0);
+  const hasImage = usable.some((m) => (m.attachments ?? []).some((a) => a.kind === "image"));
+  const model = hasImage
+    ? process.env.OPENAI_VISION_MODEL || "qwen3-vl-plus"
+    : process.env.OPENAI_MODEL || "qwen-plus";
+
+  const messages: OAMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+  for (const m of usable) {
+    if (m.role === "user") messages.push({ role: "user", content: userContent(m) });
+    else messages.push({ role: "assistant", content: m.content });
+  }
 
   const toolsUsed: string[] = [];
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const choice = await callChat(messages);
+    const choice = await callChat(model, messages);
     const calls = choice.tool_calls ?? [];
 
     if (calls.length === 0) {
-      return { reply: (choice.content ?? "").trim() || "Maaf, saya tidak punya jawaban untuk itu.", toolsUsed };
+      return {
+        type: "answer",
+        reply: (choice.content ?? "").trim() || "Maaf, saya tidak punya jawaban untuk itu.",
+        toolsUsed,
+      };
+    }
+
+    // Interactive question takes priority — stop and ask the user.
+    const ask = calls.find((c) => c.function.name === "ask_user");
+    if (ask) {
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(ask.function.arguments || "{}");
+      } catch {
+        args = {};
+      }
+      return asQuestion(args, toolsUsed);
     }
 
     messages.push({ role: "assistant", content: choice.content ?? "", tool_calls: calls });
@@ -98,17 +139,13 @@ export async function runOpenAICompatible(
       } catch (e) {
         result = { error: e instanceof Error ? e.message : String(e) };
       }
-      messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        content: JSON.stringify({ result }),
-      });
+      messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify({ result }) });
     }
   }
 
   return {
-    reply:
-      "Permintaan ini butuh terlalu banyak langkah. Coba persempit atau pecah menjadi pertanyaan yang lebih spesifik.",
+    type: "answer",
+    reply: "Permintaan ini butuh terlalu banyak langkah. Coba persempit pertanyaannya.",
     toolsUsed,
   };
 }

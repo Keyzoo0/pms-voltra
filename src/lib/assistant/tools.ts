@@ -145,6 +145,23 @@ export const TOOL_DECLARATIONS = [
       "Daftar semua kategori dan role yang tersedia (untuk dipakai saat membuat proyek). Tidak butuh argumen.",
   },
   {
+    name: "ask_user",
+    description:
+      "Tanya balik ke user saat ada informasi yang kurang atau ambigu sebelum melanjutkan (mis. memilih klien, menentukan nilai kontrak, status, role, atau proyek yang dimaksud). Lebih baik bertanya daripada menebak. Boleh sertakan opsi pilihan singkat agar user tinggal memilih.",
+    parameters: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "Pertanyaan singkat & jelas untuk user." },
+        options: {
+          type: "array",
+          items: { type: "string" },
+          description: "2-5 opsi jawaban singkat (opsional). Kosongkan bila jawaban berupa teks bebas.",
+        },
+      },
+      required: ["question"],
+    },
+  },
+  {
     name: "create_project",
     description:
       "Buat proyek baru. WAJIB konfirmasi detail ke user dan dapatkan persetujuan eksplisit sebelum memanggil tool ini. Kategori & role akan dicocokkan dengan yang sudah ada (yang tidak cocok diabaikan). Bila contractValue diisi, termin DP 50% / Pelunasan 50% dibuat otomatis.",
@@ -186,6 +203,9 @@ export async function executeTool(name: string, args: Args): Promise<unknown> {
       return listTaxonomy();
     case "create_project":
       return createProjectTool(args);
+    case "ask_user":
+      // Normally intercepted by the run loop; handled by the UI.
+      return { note: "Pertanyaan diteruskan ke pengguna." };
     default:
       return { error: `Tool tidak dikenal: ${name}` };
   }

@@ -168,6 +168,30 @@ model ProjectItem {
   @@index([projectId])
 }
 
+model AssistantChat {
+  id        String             @id @default(cuid())
+  ownerId   String
+  title     String             @default("Percakapan baru")
+  messages  AssistantMessage[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([ownerId])
+}
+
+model AssistantMessage {
+  id          String        @id @default(cuid())
+  chatId      String
+  chat        AssistantChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role        String // "user" | "assistant"
+  content     String
+  toolsUsed   String[]
+  attachments Json?
+  createdAt   DateTime      @default(now())
+
+  @@index([chatId])
+}
+
 model AppSettings {
   id               String   @id @default("singleton")
   companyName      String   @default("Voltra Techno")
