@@ -94,37 +94,66 @@ export async function POST(req: Request) {
         : undefined,
   }));
 
-  try {
-    const result = await runAssistant(history);
+  // Stream live progress (NDJSON lines) while the agent works, ending with a
+  // "done" (or "error") event. The UI shows each step as it happens.
+  const isNewChat = !body.chatId;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (obj: unknown) => {
+        try {
+          controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+        } catch {
+          // client disconnected — keep running so the result is still persisted
+        }
+      };
 
-    if (result.type === "question") {
-      await db.assistantMessage.create({
-        data: {
-          chatId,
-          role: "assistant",
-          content: result.question,
-          toolsUsed: result.toolsUsed,
-          attachments: { kind: "question", options: result.options } as unknown as object,
-        },
-      });
-    } else {
-      await db.assistantMessage.create({
-        data: { chatId, role: "assistant", content: result.reply, toolsUsed: result.toolsUsed },
-      });
-    }
-    await db.assistantChat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+      try {
+        const result = await runAssistant(history, (ev) => send({ type: "status", ...ev }));
 
-    return NextResponse.json({ chatId, title, ...result });
-  } catch (e) {
-    // Roll back the empty chat if the very first turn failed.
-    if (!body.chatId) {
-      await db.assistantChat.delete({ where: { id: chatId } }).catch(() => {});
-    }
-    if (e instanceof AssistantError) {
-      const status = e.code === "no_key" ? 503 : e.code === "input" ? 400 : 502;
-      return NextResponse.json({ error: e.message, code: e.code }, { status });
-    }
-    console.error("[assistant] error:", e);
-    return NextResponse.json({ error: "Terjadi kesalahan pada server asisten." }, { status: 500 });
-  }
+        if (result.type === "question") {
+          await db.assistantMessage.create({
+            data: {
+              chatId,
+              role: "assistant",
+              content: result.question,
+              toolsUsed: result.toolsUsed,
+              attachments: { kind: "question", options: result.options } as unknown as object,
+            },
+          });
+        } else {
+          await db.assistantMessage.create({
+            data: { chatId, role: "assistant", content: result.reply, toolsUsed: result.toolsUsed },
+          });
+        }
+        await db.assistantChat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+
+        const { type: resultType, ...rest } = result;
+        send({ type: "done", chatId, title, resultType, ...rest });
+      } catch (e) {
+        // Roll back the empty chat if the very first turn failed.
+        if (isNewChat) {
+          await db.assistantChat.delete({ where: { id: chatId } }).catch(() => {});
+        }
+        if (e instanceof AssistantError) {
+          send({ type: "error", error: e.message, code: e.code });
+        } else {
+          console.error("[assistant] error:", e);
+          send({ type: "error", error: "Terjadi kesalahan pada server asisten." });
+        }
+      } finally {
+        try {
+          controller.close();
+        } catch {}
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      "x-accel-buffering": "no",
+    },
+  });
 }

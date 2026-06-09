@@ -12,6 +12,12 @@ export type AssistantResult =
   | { type: "answer"; reply: string; toolsUsed: string[] }
   | { type: "question"; question: string; options: string[]; toolsUsed: string[] };
 
+/** Live progress events emitted while the agent works (streamed to the UI). */
+export type StatusEvent =
+  | { kind: "thinking" }
+  | { kind: "tools"; tools: string[] };
+export type OnStatus = (ev: StatusEvent) => void;
+
 export class AssistantError extends Error {
   code: "no_key" | "upstream" | "input";
   constructor(message: string, code: "no_key" | "upstream" | "input") {

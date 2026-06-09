@@ -7,6 +7,7 @@ import {
   type AssistantResult,
   type Attachment,
   type ChatMessage,
+  type OnStatus,
 } from "./shared";
 
 /**
@@ -127,7 +128,10 @@ async function callChat(model: string, messages: OAMessage[]) {
   throw lastErr ?? new AssistantError("Gagal menghubungi penyedia AI.", "upstream");
 }
 
-export async function runOpenAICompatible(history: ChatMessage[]): Promise<AssistantResult> {
+export async function runOpenAICompatible(
+  history: ChatMessage[],
+  onStatus?: OnStatus,
+): Promise<AssistantResult> {
   const usable = history.filter((m) => m.content.trim() || (m.attachments?.length ?? 0) > 0);
   const hasImage = usable.some((m) => (m.attachments ?? []).some((a) => a.kind === "image"));
   const model = hasImage
@@ -143,6 +147,7 @@ export async function runOpenAICompatible(history: ChatMessage[]): Promise<Assis
   const toolsUsed: string[] = [];
 
   for (let step = 0; step < MAX_STEPS; step++) {
+    onStatus?.({ kind: "thinking" });
     const choice = await callChat(model, messages);
     const calls = choice.tool_calls ?? [];
 
@@ -167,6 +172,7 @@ export async function runOpenAICompatible(history: ChatMessage[]): Promise<Assis
     }
 
     messages.push({ role: "assistant", content: choice.content ?? "", tool_calls: calls });
+    onStatus?.({ kind: "tools", tools: calls.map((c) => c.function.name) });
     // Execute independent calls of one round in parallel.
     const results = await Promise.all(
       calls.map(async (call) => {

@@ -130,6 +130,7 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
   const [input, setInput] = useState("");
   const [pending, setPending] = useState<Pending[]>([]);
   const [loading, setLoading] = useState(false);
+  const [liveStatus, setLiveStatus] = useState("");
   const [loadingChat, setLoadingChat] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
@@ -217,45 +218,104 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
     setInput("");
     setPending([]);
     setLoading(true);
+    setLiveStatus("");
+
+    const fail = (msg: string) =>
+      setMessages((m) => [...m, { role: "assistant", error: true, content: `⚠️ ${msg}` }]);
+
+    const handleDone = (data: {
+      chatId: string;
+      title: string;
+      resultType: string;
+      reply?: string;
+      question?: string;
+      options?: string[];
+      toolsUsed?: string[];
+    }) => {
+      if (!activeId) setActiveId(data.chatId);
+      setChats((c) => {
+        const without = c.filter((x) => x.id !== data.chatId);
+        return [{ id: data.chatId, title: data.title, updatedAt: new Date().toISOString() }, ...without];
+      });
+      if (data.resultType === "question") {
+        setMessages((m) => [
+          ...m,
+          { role: "assistant", content: data.question ?? "", options: data.options, toolsUsed: data.toolsUsed },
+        ]);
+      } else {
+        setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "", toolsUsed: data.toolsUsed }]);
+      }
+    };
+
     try {
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ chatId: activeId, content, attachments: atts }),
       });
-      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        setMessages((m) => [
-          ...m,
-          {
-            role: "assistant",
-            error: true,
-            content:
-              data?.code === "no_key"
-                ? "⚠️ API key AI belum dikonfigurasi di server."
-                : `⚠️ ${data?.error ?? "Gagal menghubungi asisten."}`,
-          },
-        ]);
-      } else {
-        const newChat = !activeId;
-        if (newChat) setActiveId(data.chatId);
-        setChats((c) => {
-          const without = c.filter((x) => x.id !== data.chatId);
-          return [{ id: data.chatId, title: data.title, updatedAt: new Date().toISOString() }, ...without];
-        });
-        if (data.type === "question") {
-          setMessages((m) => [
-            ...m,
-            { role: "assistant", content: data.question, options: data.options, toolsUsed: data.toolsUsed },
-          ]);
-        } else {
-          setMessages((m) => [...m, { role: "assistant", content: data.reply, toolsUsed: data.toolsUsed }]);
+        const data = await res.json().catch(() => ({}));
+        fail(
+          data?.code === "no_key"
+            ? "API key AI belum dikonfigurasi di server."
+            : data?.error ?? "Gagal menghubungi asisten.",
+        );
+        return;
+      }
+
+      // Stream NDJSON progress events until "done"/"error".
+      const reader = res.body?.getReader();
+      if (!reader) {
+        fail("Browser tidak mendukung streaming respons.");
+        return;
+      }
+      const decoder = new TextDecoder();
+      let buf = "";
+      let finished = false;
+      const handleLine = (line: string) => {
+        if (!line.trim()) return;
+        let ev: Record<string, unknown>;
+        try {
+          ev = JSON.parse(line);
+        } catch {
+          return;
+        }
+        if (ev.type === "status") {
+          if (ev.kind === "thinking") setLiveStatus("Berpikir…");
+          else if (ev.kind === "tools" && Array.isArray(ev.tools)) {
+            const labels = [...new Set(ev.tools.map((t) => TOOL_LABELS[String(t)] ?? String(t)))];
+            setLiveStatus(labels.join(" · ") + "…");
+          }
+        } else if (ev.type === "done") {
+          finished = true;
+          handleDone(ev as Parameters<typeof handleDone>[0]);
+        } else if (ev.type === "error") {
+          finished = true;
+          fail(
+            ev.code === "no_key"
+              ? "API key AI belum dikonfigurasi di server."
+              : String(ev.error ?? "Gagal menghubungi asisten."),
+          );
+        }
+      };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n")) >= 0) {
+          handleLine(buf.slice(0, idx));
+          buf = buf.slice(idx + 1);
         }
       }
+      handleLine(buf);
+      if (!finished) fail("Respons terputus. Coba muat ulang percakapan — hasil mungkin sudah tersimpan.");
     } catch {
-      setMessages((m) => [...m, { role: "assistant", error: true, content: "⚠️ Koneksi gagal. Coba lagi." }]);
+      fail("Koneksi gagal. Coba lagi.");
     } finally {
       setLoading(false);
+      setLiveStatus("");
       taRef.current?.focus();
     }
   }
@@ -464,7 +524,8 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
                 <Sparkles className="size-3.5" />
               </span>
               <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-border bg-background px-3.5 py-2.5 text-sm text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" /> Menganalisa…
+                <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                <span className="animate-pulse">{liveStatus || "Menganalisa…"}</span>
               </div>
             </div>
           )}
