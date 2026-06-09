@@ -8,8 +8,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const DOC_EXT = [".pdf", ".xlsx", ".csv", ".txt", ".md", ".json", ".tsv"];
-
 function safeName(name: string): string {
   return name.replace(/[^\w.\-]+/g, "_").slice(-80) || "file";
 }
@@ -32,9 +30,7 @@ export async function POST(req: Request) {
   }
 
   const name = file.name || "file";
-  const lower = name.toLowerCase();
   const isImage = file.type.startsWith("image/");
-  const isDoc = DOC_EXT.some((e) => lower.endsWith(e)) || file.type.includes("pdf") || file.type.includes("sheet");
 
   try {
     if (isImage) {
@@ -48,29 +44,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ attachment: att });
     }
 
-    if (isDoc) {
-      if (file.size > 15 * 1024 * 1024)
-        return NextResponse.json({ error: "Dokumen maksimal 15MB." }, { status: 400 });
-      const buf = Buffer.from(await file.arrayBuffer());
-      const text = await extractDocumentText(buf, name, file.type);
-      if (!text.trim())
-        return NextResponse.json(
-          { error: "Tidak ada teks yang bisa dibaca dari dokumen ini." },
-          { status: 400 },
-        );
-      const att: Attachment = { kind: "document", name, text, mime: file.type };
-      return NextResponse.json({ attachment: att });
-    }
-
-    return NextResponse.json(
-      { error: "Jenis file tidak didukung. Pakai gambar, PDF, Excel (.xlsx), atau CSV/teks." },
-      { status: 400 },
-    );
+    // Any non-image file → extract text (PDF, Word, Excel, CSV, code, …).
+    if (file.size > 20 * 1024 * 1024)
+      return NextResponse.json({ error: "Dokumen maksimal 20MB." }, { status: 400 });
+    const buf = Buffer.from(await file.arrayBuffer());
+    const text = await extractDocumentText(buf, name, file.type);
+    if (!text.trim())
+      return NextResponse.json(
+        { error: "Tidak ada teks yang bisa dibaca dari file ini." },
+        { status: 400 },
+      );
+    const att: Attachment = { kind: "document", name, text, mime: file.type };
+    return NextResponse.json({ attachment: att });
   } catch (e) {
+    const msg = e instanceof Error && e.message === "unsupported-binary"
+      ? "Jenis file ini tidak didukung (file biner). Pakai gambar, PDF, Word, Excel, CSV, atau file teks/kode."
+      : "Gagal memproses file. Coba file lain atau format berbeda.";
     console.error("[assistant/upload] error:", e);
-    return NextResponse.json(
-      { error: "Gagal memproses file. Coba file lain atau format berbeda." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 }

@@ -12,6 +12,8 @@ import {
   MessageSquarePlus,
   Paperclip,
   PanelLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
   Sparkles,
   Trash2,
   UserPlus,
@@ -63,7 +65,9 @@ const SUGGESTIONS = [
   { icon: Wand2, text: "Bantu saya buat proyek baru" },
 ];
 
-const ACCEPT = "image/*,.pdf,.xlsx,.csv,.txt,.md,.json,.tsv";
+// Accept everything — the server validates & extracts (images, PDF, Word,
+// Excel, CSV, JSON, and any text/code file).
+const ACCEPT = "*/*";
 
 function relTime(iso: string): string {
   const d = Date.now() - new Date(iso).getTime();
@@ -103,6 +107,19 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
   const [loading, setLoading] = useState(false);
   const [loadingChat, setLoadingChat] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
+
+  useEffect(() => {
+    setHistoryCollapsed(localStorage.getItem("voltra_ai_history_collapsed") === "1");
+  }, []);
+
+  function toggleHistory() {
+    setHistoryCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem("voltra_ai_history_collapsed", next ? "1" : "0");
+      return next;
+    });
+  }
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -230,8 +247,9 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
       {/* Sidebar: recent chats */}
       <aside
         className={cn(
-          "absolute z-20 flex h-[calc(100vh-12rem)] w-64 shrink-0 flex-col border-r border-border/60 bg-card md:static md:z-auto md:flex md:h-auto",
+          "absolute z-20 flex h-[calc(100vh-12rem)] w-64 shrink-0 flex-col border-r border-border/60 bg-card md:static md:z-auto md:h-auto",
           showSidebar ? "flex" : "hidden",
+          historyCollapsed ? "md:hidden" : "md:flex",
         )}
       >
         <div className="p-3">
@@ -286,6 +304,14 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
               title="Riwayat"
             >
               <PanelLeft className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={toggleHistory}
+              className="hidden rounded-md p-1.5 text-muted-foreground hover:bg-accent md:inline-flex"
+              title={historyCollapsed ? "Tampilkan riwayat" : "Sembunyikan riwayat"}
+            >
+              {historyCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
             </button>
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Sparkles className="size-4" />

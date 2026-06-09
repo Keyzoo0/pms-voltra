@@ -1,4 +1,4 @@
-const MAX_CHARS = 8000;
+const MAX_CHARS = 12000;
 
 function cellToString(value: unknown): string {
   if (value == null) return "";
@@ -37,7 +37,28 @@ async function xlsxText(buf: Buffer): Promise<string> {
   return parts.join("\n");
 }
 
-/** Extract plain text from an uploaded document (PDF, Excel, CSV/TXT/etc.). */
+async function docxText(buf: Buffer): Promise<string> {
+  const mammoth = await import("mammoth");
+  const { value } = await mammoth.extractRawText({ buffer: buf });
+  return value;
+}
+
+/** Heuristic: is this buffer human-readable text (not a binary blob)? */
+function isProbablyText(buf: Buffer): boolean {
+  const sample = buf.subarray(0, 4000);
+  let suspicious = 0;
+  for (const byte of sample) {
+    if (byte === 0) return false; // null byte → binary
+    // allow tab(9), LF(10), CR(13); flag other control chars
+    if (byte < 9 || (byte > 13 && byte < 32)) suspicious++;
+  }
+  return suspicious / Math.max(1, sample.length) < 0.1;
+}
+
+/**
+ * Extract plain text from an uploaded document. Handles PDF, Excel, Word
+ * (.docx), and any text/code/CSV/JSON file; rejects unreadable binaries.
+ */
 export async function extractDocumentText(
   buf: Buffer,
   name: string,
@@ -50,9 +71,13 @@ export async function extractDocumentText(
     text = await pdfText(buf);
   } else if (lower.endsWith(".xlsx") || mime.includes("spreadsheetml") || mime.includes("ms-excel")) {
     text = await xlsxText(buf);
-  } else {
-    // csv, txt, md, json, tsv, … — treat as UTF-8 text
+  } else if (lower.endsWith(".docx") || mime.includes("wordprocessingml")) {
+    text = await docxText(buf);
+  } else if (isProbablyText(buf)) {
+    // csv, txt, md, json, tsv, html, and source code of any language
     text = buf.toString("utf-8");
+  } else {
+    throw new Error("unsupported-binary");
   }
 
   const normalized = text.replace(/\n{3,}/g, "\n\n").trim();
