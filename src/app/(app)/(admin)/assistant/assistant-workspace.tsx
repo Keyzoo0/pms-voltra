@@ -1,9 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Bot,
+  Check,
+  Copy,
   CornerDownLeft,
   FileImage,
   FileText,
@@ -16,6 +18,7 @@ import {
   PanelLeftOpen,
   Sparkles,
   Trash2,
+  UploadCloud,
   UserPlus,
   Wand2,
   X,
@@ -134,6 +137,8 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
   const [loadingChat, setLoadingChat] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     setHistoryCollapsed(localStorage.getItem("voltra_ai_history_collapsed") === "1");
@@ -155,12 +160,49 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
+  // Auto-grow the composer with its content (capped via max-h class).
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+  }, [input]);
+
+  async function copyMessage(idx: number, content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx((c) => (c === idx ? null : c)), 1500);
+    } catch {}
+  }
+
+  // Group chats by recency for the history sidebar.
+  const chatGroups = useMemo(() => {
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const groups: { label: string; items: ChatListItem[] }[] = [
+      { label: "Hari Ini", items: [] },
+      { label: "Kemarin", items: [] },
+      { label: "7 Hari Terakhir", items: [] },
+      { label: "Lebih Lama", items: [] },
+    ];
+    for (const c of chats) {
+      const t = new Date(c.updatedAt).getTime();
+      if (t >= startOfDay) groups[0].items.push(c);
+      else if (t >= startOfDay - 86_400_000) groups[1].items.push(c);
+      else if (t >= startOfDay - 6 * 86_400_000) groups[2].items.push(c);
+      else groups[3].items.push(c);
+    }
+    return groups.filter((g) => g.items.length > 0);
+  }, [chats]);
+
   function startNewChat() {
     setActiveId(null);
     setMessages([]);
     setPending([]);
     setInput("");
     setShowSidebar(false);
+    localStorage.removeItem("voltra_ai_last_chat");
     taRef.current?.focus();
   }
 
@@ -168,6 +210,7 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
     if (id === activeId) return setShowSidebar(false);
     setActiveId(id);
     setShowSidebar(false);
+    localStorage.setItem("voltra_ai_last_chat", id);
     setLoadingChat(true);
     setMessages([]);
     try {
@@ -178,10 +221,20 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
     }
   }
 
+  // Restore the last open session when returning to this page.
+  useEffect(() => {
+    const last = localStorage.getItem("voltra_ai_last_chat");
+    if (last && initialChats.some((c) => c.id === last)) void openChat(last);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function removeChat(id: string) {
     if (!confirm("Hapus percakapan ini?")) return;
     await deleteChat(id);
     setChats((c) => c.filter((x) => x.id !== id));
+    if (localStorage.getItem("voltra_ai_last_chat") === id) {
+      localStorage.removeItem("voltra_ai_last_chat");
+    }
     if (id === activeId) startNewChat();
   }
 
@@ -233,6 +286,7 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
       toolsUsed?: string[];
     }) => {
       if (!activeId) setActiveId(data.chatId);
+      localStorage.setItem("voltra_ai_last_chat", data.chatId);
       setChats((c) => {
         const without = c.filter((x) => x.id !== data.chatId);
         return [{ id: data.chatId, title: data.title, updatedAt: new Date().toISOString() }, ...without];
@@ -328,11 +382,11 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
   }
 
   return (
-    <div className="flex h-[calc(100vh-9rem)] min-h-[30rem] overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className="relative flex h-[calc(100dvh-8rem)] min-h-[28rem] overflow-hidden rounded-xl border border-border bg-card shadow-sm lg:h-[calc(100dvh-4rem)]">
       {/* Sidebar: recent chats */}
       <aside
         className={cn(
-          "absolute z-20 flex h-[calc(100vh-9rem)] w-64 shrink-0 flex-col border-r border-border/60 bg-card md:static md:z-auto md:h-auto",
+          "absolute inset-y-0 left-0 z-20 flex w-64 shrink-0 flex-col border-r border-border/60 bg-card md:static md:z-auto",
           showSidebar ? "flex" : "hidden",
           historyCollapsed ? "md:hidden" : "md:flex",
         )}
@@ -342,44 +396,71 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
             <MessageSquarePlus /> Chat baru
           </Button>
         </div>
-        <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
-          <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Riwayat
-          </p>
+        <div className="flex-1 space-y-3 overflow-y-auto px-2 pb-3">
           {chats.length === 0 && (
             <p className="px-2 py-2 text-xs text-muted-foreground">Belum ada percakapan.</p>
           )}
-          {chats.map((c) => (
-            <div
-              key={c.id}
-              className={cn(
-                "group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm transition-colors",
-                c.id === activeId ? "bg-accent" : "hover:bg-accent/60",
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => openChat(c.id)}
-                className="min-w-0 flex-1 text-left"
-              >
-                <span className="block truncate font-medium">{c.title}</span>
-                <span className="text-[11px] text-muted-foreground">{relTime(c.updatedAt)}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => removeChat(c.id)}
-                title="Hapus"
-                className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
+          {chatGroups.map((g) => (
+            <div key={g.label}>
+              <p className="px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {g.label}
+              </p>
+              <div className="space-y-0.5">
+                {g.items.map((c) => (
+                  <div
+                    key={c.id}
+                    className={cn(
+                      "group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm transition-colors",
+                      c.id === activeId ? "bg-accent" : "hover:bg-accent/60",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openChat(c.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <span className="block truncate font-medium">{c.title}</span>
+                      <span className="text-[11px] text-muted-foreground">{relTime(c.updatedAt)}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeChat(c.id)}
+                      title="Hapus"
+                      className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
       </aside>
 
       {/* Chat pane */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div
+        className="relative flex min-w-0 flex-1 flex-col"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget === e.target) setDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          if (e.dataTransfer.files?.length) uploadFiles(e.dataTransfer.files);
+        }}
+      >
+        {dragging && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-r-xl border-2 border-dashed border-primary/60 bg-primary/5 backdrop-blur-[1px]">
+            <div className="flex items-center gap-2 rounded-xl bg-card px-4 py-2.5 text-sm font-medium text-primary shadow-lg">
+              <UploadCloud className="size-4" /> Lepaskan file untuk dilampirkan
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
           <div className="flex items-center gap-2.5">
             <button
@@ -403,7 +484,9 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
             </span>
             <div className="leading-tight">
               <p className="text-sm font-semibold">Voltra AI</p>
-              <p className="text-[11px] text-muted-foreground">Asisten analisa & manajemen proyek</p>
+              <p className="text-[11px] text-muted-foreground">
+                Agen operasional PMS · Qwen3.7 Max
+              </p>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={startNewChat} className="text-muted-foreground">
@@ -469,7 +552,7 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
                     )}
                   </div>
                 ) : (
-                  <div className="flex gap-2.5">
+                  <div className="group flex gap-2.5">
                     <span
                       className={cn(
                         "flex size-7 shrink-0 items-center justify-center rounded-lg",
@@ -481,11 +564,25 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
                     <div className="min-w-0 max-w-[85%]">
                       <div
                         className={cn(
-                          "rounded-2xl rounded-tl-sm border px-3.5 py-2.5",
+                          "relative rounded-2xl rounded-tl-sm border px-3.5 py-2.5",
                           m.error ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border bg-background",
                         )}
                       >
                         <Markdown text={m.content} />
+                        {!m.error && (
+                          <button
+                            type="button"
+                            onClick={() => copyMessage(i, m.content)}
+                            title="Salin jawaban"
+                            className="absolute -right-2 -top-2 rounded-md border border-border bg-card p-1.5 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-foreground group-hover:opacity-100"
+                          >
+                            {copiedIdx === i ? (
+                              <Check className="size-3.5 text-emerald-500" />
+                            ) : (
+                              <Copy className="size-3.5" />
+                            )}
+                          </button>
+                        )}
                       </div>
                       {m.options && m.options.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5 pl-0.5">
@@ -583,6 +680,13 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
+              onPaste={(e) => {
+                const files = e.clipboardData?.files;
+                if (files?.length) {
+                  e.preventDefault();
+                  uploadFiles(files);
+                }
+              }}
               rows={1}
               placeholder="Tanya atau lampirkan file…"
               className="max-h-32 flex-1 resize-none bg-transparent px-1 py-1 text-sm outline-none placeholder:text-muted-foreground"

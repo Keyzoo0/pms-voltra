@@ -82,7 +82,12 @@ export async function extractDocumentText(
     throw new Error("unsupported-binary");
   }
 
-  const normalized = text.replace(/\n{3,}/g, "\n\n").trim();
+  // Strip C0 control chars except \n and \t (esp. \u0000 — Postgres rejects
+  // it in text/jsonb; PDF extraction often emits them).
+  const normalized = text
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   return normalized.length > MAX_CHARS
     ? normalized.slice(0, MAX_CHARS) + "\n…[dokumen dipotong]"
     : normalized;

@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { LogOut, Menu } from "lucide-react";
-import { logout } from "@/app/login/actions";
+import { Menu } from "lucide-react";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { BrandMark } from "@/components/brand";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +12,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+/**
+ * Mobile-only top bar: hamburger (opens the nav drawer) + brand. On desktop
+ * the sidebar carries everything (nav, theme, logout), so no top bar at all.
+ */
 export function Topbar({
   role,
   name,
@@ -24,13 +26,12 @@ export function Topbar({
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md lg:px-8">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md lg:hidden">
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
           <Button
             variant="outline"
             size="icon-sm"
-            className="lg:hidden"
             aria-label="Buka menu"
           >
             <Menu />
@@ -45,27 +46,9 @@ export function Topbar({
         </DialogContent>
       </Dialog>
 
-      <div className="flex items-center gap-2 lg:hidden">
+      <div className="flex items-center gap-2">
         <BrandMark className="size-8" />
         <span className="text-sm font-semibold tracking-tight">Voltra PMS</span>
-      </div>
-
-      <div className="ml-auto flex items-center gap-2">
-        <span className="hidden text-sm text-muted-foreground sm:inline">
-          {name}
-        </span>
-        <ThemeToggle />
-        <form action={logout}>
-          <Button
-            type="submit"
-            variant="ghost"
-            size="sm"
-            className="gap-2 text-muted-foreground hover:text-foreground"
-          >
-            <LogOut className="size-4" />
-            <span className="hidden sm:inline">Keluar</span>
-          </Button>
-        </form>
       </div>
     </header>
   );

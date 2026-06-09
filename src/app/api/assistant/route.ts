@@ -7,6 +7,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
 
+/** Postgres rejects \u0000 in text/jsonb — strip control chars defensively. */
+function cleanText(v: string): string {
+  // eslint-disable-next-line no-control-regex
+  return v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ");
+}
+
 function sanitizeAttachments(raw: unknown): Attachment[] {
   if (!Array.isArray(raw)) return [];
   const out: Attachment[] = [];
@@ -19,7 +25,7 @@ function sanitizeAttachments(raw: unknown): Attachment[] {
       out.push({
         kind: "document",
         name: String(o.name ?? "dokumen"),
-        text: o.text.slice(0, 8000),
+        text: cleanText(o.text).slice(0, 8000),
         mime: typeof o.mime === "string" ? o.mime : undefined,
       });
     }
@@ -48,7 +54,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Body tidak valid." }, { status: 400 });
   }
 
-  const content = typeof body.content === "string" ? body.content : "";
+  const content = typeof body.content === "string" ? cleanText(body.content) : "";
   const attachments = sanitizeAttachments(body.attachments);
   if (!content.trim() && attachments.length === 0) {
     return NextResponse.json({ error: "Pesan kosong." }, { status: 400 });

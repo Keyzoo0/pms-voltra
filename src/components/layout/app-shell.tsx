@@ -43,7 +43,7 @@ export function AppShell({
 
       <div className={cn("transition-[padding] duration-200", collapsed ? "lg:pl-16" : "lg:pl-64")}>
         <Topbar role={role} name={name} />
-        <main className="px-4 py-6 lg:px-8 lg:py-8">
+        <main className="px-4 py-5 lg:px-6 lg:py-6">
           <div className="mx-auto w-full max-w-7xl animate-in fade-in-50 duration-300">
             {children}
           </div>

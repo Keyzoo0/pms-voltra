@@ -1,22 +1,28 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTheme } from "next-themes";
 import {
   Building2,
   FolderKanban,
   LayoutDashboard,
+  LogOut,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   ReceiptText,
   Settings,
   Sparkles,
+  Sun,
   User,
   Users,
   Wallet,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { BrandMark } from "@/components/brand";
+import { logout } from "@/app/login/actions";
 
 const ADMIN_NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -128,29 +134,79 @@ export function AppSidebar({
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-4">
-        <div
-          className={cn(
-            "flex items-center rounded-lg bg-sidebar-accent/50",
-            collapsed ? "justify-center p-1.5" : "gap-2.5 px-3 py-2.5",
-          )}
-        >
-          <span
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/20 text-xs font-semibold text-sidebar-primary"
-            title={collapsed ? name : undefined}
-          >
-            {initials(name) || "U"}
-          </span>
-          {!collapsed && (
-            <div className="min-w-0 leading-tight">
+      <div className={cn("border-t border-sidebar-border", collapsed ? "p-2" : "p-3")}>
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-1">
+            <SidebarThemeButton collapsed />
+            <form action={logout} className="w-full">
+              <button
+                type="submit"
+                title="Keluar"
+                aria-label="Keluar"
+                className="flex w-full items-center justify-center rounded-lg p-2 text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent/60 hover:text-white"
+              >
+                <LogOut className="size-[18px]" />
+              </button>
+            </form>
+            <span
+              className="mt-1 flex size-8 items-center justify-center rounded-full bg-sidebar-primary/20 text-xs font-semibold text-sidebar-primary"
+              title={name}
+            >
+              {initials(name) || "U"}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg bg-sidebar-accent/50 px-2.5 py-2">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/20 text-xs font-semibold text-sidebar-primary">
+              {initials(name) || "U"}
+            </span>
+            <div className="min-w-0 flex-1 leading-tight">
               <p className="truncate text-xs font-medium text-white">{name}</p>
               <p className="truncate text-[11px] text-sidebar-foreground/50">
                 {role === "admin" ? "Administrator" : "Karyawan"}
               </p>
             </div>
-          )}
-        </div>
+            <SidebarThemeButton />
+            <form action={logout}>
+              <button
+                type="submit"
+                title="Keluar"
+                aria-label="Keluar"
+                className="rounded-md p-1.5 text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-white"
+              >
+                <LogOut className="size-4" />
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function SidebarThemeButton({ collapsed = false }: { collapsed?: boolean }) {
+  const { setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const isDark = mounted && resolvedTheme === "dark";
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      title="Ganti tema"
+      aria-label="Ganti tema terang/gelap"
+      className={cn(
+        "rounded-md text-sidebar-foreground/60 transition-colors hover:text-white",
+        collapsed
+          ? "flex w-full items-center justify-center p-2 hover:bg-sidebar-accent/60"
+          : "p-1.5 hover:bg-sidebar-accent",
+      )}
+    >
+      {isDark ? (
+        <Sun className={collapsed ? "size-[18px]" : "size-4"} />
+      ) : (
+        <Moon className={collapsed ? "size-[18px]" : "size-4"} />
+      )}
+    </button>
   );
 }
