@@ -496,7 +496,7 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
 
         {/* messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-5">
-          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4">
+          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-4">
           {loadingChat ? (
             <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 size-4 animate-spin" /> Memuat percakapan…
@@ -632,7 +632,7 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
 
         {/* composer */}
         <div className="border-t border-border/60 p-3">
-          <div className="mx-auto w-full max-w-3xl">
+          <div className="mx-auto w-full max-w-4xl">
           {pending.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
               {pending.map((p) => (
