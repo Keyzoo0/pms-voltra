@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Topbar } from "@/components/layout/topbar";
 
 const STORAGE_KEY = "voltra_sidebar_collapsed";
+
+/** Routes that fill the whole content area (no padding, no max-width box). */
+const FULL_BLEED_ROUTES = ["/assistant"];
 
 export function AppShell({
   role,
@@ -17,6 +21,10 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
+  const fullBleed = FULL_BLEED_ROUTES.some(
+    (r) => pathname === r || pathname.startsWith(`${r}/`),
+  );
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(STORAGE_KEY) === "1");
@@ -43,11 +51,15 @@ export function AppShell({
 
       <div className={cn("transition-[padding] duration-200", collapsed ? "lg:pl-16" : "lg:pl-64")}>
         <Topbar role={role} name={name} />
-        <main className="px-4 py-5 lg:px-6 lg:py-6">
-          <div className="mx-auto w-full max-w-7xl animate-in fade-in-50 duration-300">
-            {children}
-          </div>
-        </main>
+        {fullBleed ? (
+          <main className="animate-in fade-in-50 duration-300">{children}</main>
+        ) : (
+          <main className="px-4 py-5 lg:px-6 lg:py-6">
+            <div className="mx-auto w-full max-w-7xl animate-in fade-in-50 duration-300">
+              {children}
+            </div>
+          </main>
+        )}
       </div>
     </div>
   );

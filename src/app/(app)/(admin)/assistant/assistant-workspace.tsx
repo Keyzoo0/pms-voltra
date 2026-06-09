@@ -382,7 +382,7 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
   }
 
   return (
-    <div className="relative flex h-[calc(100dvh-8rem)] min-h-[28rem] overflow-hidden rounded-xl border border-border bg-card shadow-sm lg:h-[calc(100dvh-4rem)]">
+    <div className="relative flex h-[calc(100dvh-3.5rem)] min-h-[28rem] overflow-hidden lg:h-dvh">
       {/* Sidebar: recent chats */}
       <aside
         className={cn(
@@ -455,7 +455,7 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
         }}
       >
         {dragging && (
-          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-r-xl border-2 border-dashed border-primary/60 bg-primary/5 backdrop-blur-[1px]">
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center border-2 border-dashed border-primary/60 bg-primary/5 backdrop-blur-[1px]">
             <div className="flex items-center gap-2 rounded-xl bg-card px-4 py-2.5 text-sm font-medium text-primary shadow-lg">
               <UploadCloud className="size-4" /> Lepaskan file untuk dilampirkan
             </div>
@@ -495,13 +495,14 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
         </div>
 
         {/* messages */}
-        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-5">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-5">
+          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4">
           {loadingChat ? (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 size-4 animate-spin" /> Memuat percakapan…
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center text-center">
+            <div className="flex flex-1 flex-col items-center justify-center text-center">
               <span className="mb-3 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                 <Bot className="size-6" />
               </span>
@@ -626,10 +627,12 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* composer */}
         <div className="border-t border-border/60 p-3">
+          <div className="mx-auto w-full max-w-3xl">
           {pending.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
               {pending.map((p) => (
@@ -698,6 +701,7 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
           <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">
             Enter kirim · Shift+Enter baris baru · lampirkan gambar/PDF/Excel/CSV · Voltra AI bisa keliru.
           </p>
+          </div>
         </div>
       </div>
     </div>
