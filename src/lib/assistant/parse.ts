@@ -1,6 +1,3 @@
-import { PDFParse } from "pdf-parse";
-import ExcelJS from "exceljs";
-
 const MAX_CHARS = 8000;
 
 function cellToString(value: unknown): string {
@@ -18,6 +15,28 @@ function cellToString(value: unknown): string {
   return String(value);
 }
 
+async function pdfText(buf: Buffer): Promise<string> {
+  const { PDFParse } = await import("pdf-parse");
+  const parser = new PDFParse({ data: buf });
+  const out = await parser.getText();
+  return out.text;
+}
+
+async function xlsxText(buf: Buffer): Promise<string> {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf as unknown as ArrayBuffer);
+  const parts: string[] = [];
+  wb.eachSheet((ws) => {
+    parts.push(`# Sheet: ${ws.name}`);
+    ws.eachRow((row) => {
+      const values = (row.values as unknown[]).slice(1).map(cellToString);
+      if (values.some((v) => v.length > 0)) parts.push(values.join(" | "));
+    });
+  });
+  return parts.join("\n");
+}
+
 /** Extract plain text from an uploaded document (PDF, Excel, CSV/TXT/etc.). */
 export async function extractDocumentText(
   buf: Buffer,
@@ -28,25 +47,9 @@ export async function extractDocumentText(
   let text = "";
 
   if (mime.includes("pdf") || lower.endsWith(".pdf")) {
-    const parser = new PDFParse({ data: buf });
-    const out = await parser.getText();
-    text = out.text;
-  } else if (
-    lower.endsWith(".xlsx") ||
-    mime.includes("spreadsheetml") ||
-    mime.includes("ms-excel")
-  ) {
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buf as unknown as ArrayBuffer);
-    const parts: string[] = [];
-    wb.eachSheet((ws) => {
-      parts.push(`# Sheet: ${ws.name}`);
-      ws.eachRow((row) => {
-        const values = (row.values as unknown[]).slice(1).map(cellToString);
-        if (values.some((v) => v.length > 0)) parts.push(values.join(" | "));
-      });
-    });
-    text = parts.join("\n");
+    text = await pdfText(buf);
+  } else if (lower.endsWith(".xlsx") || mime.includes("spreadsheetml") || mime.includes("ms-excel")) {
+    text = await xlsxText(buf);
   } else {
     // csv, txt, md, json, tsv, … — treat as UTF-8 text
     text = buf.toString("utf-8");
