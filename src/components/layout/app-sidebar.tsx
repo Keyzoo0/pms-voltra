@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   ReceiptText,
   Settings,
+  Sparkles,
   User,
   Users,
   Wallet,
@@ -17,6 +18,7 @@ import { BrandMark } from "@/components/brand";
 
 const ADMIN_NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/assistant", label: "AI Assistant", icon: Sparkles },
   { href: "/projects", label: "Proyek", icon: FolderKanban },
   { href: "/employees", label: "Karyawan", icon: Users },
   { href: "/clients", label: "Klien", icon: Building2 },
