@@ -354,6 +354,24 @@ export const TOOL_DECLARATIONS = [
     },
   },
   {
+    name: "update_assignment",
+    description:
+      "Ubah penugasan karyawan yang SUDAH ADA di sebuah proyek: ganti role, fee, status fee, atau jadikan/lepas sebagai Project Manager (isManager). Pakai ini untuk menjadikan karyawan yang sudah ditugaskan sebagai PM — JANGAN membuat penugasan kedua. Resolusi via nama/id proyek & karyawan.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        projectName: { type: "string" },
+        employeeId: { type: "string" },
+        employeeName: { type: "string" },
+        roleName: { type: "string", description: "Ganti role penugasan ('' untuk menghapus role)." },
+        fee: { type: "number", description: "Fee baru (IDR)." },
+        feeStatus: { type: "string", enum: ["pending", "paid"], description: "Status pencairan fee." },
+        isManager: { type: "boolean", description: "Jadikan PM (true) atau lepas PM (false)." },
+      },
+    },
+  },
+  {
     name: "unassign_employee",
     description: "Lepas penugasan seorang karyawan dari sebuah proyek. WAJIB konfirmasi dulu.",
     parameters: {
@@ -413,6 +431,8 @@ export async function executeTool(name: string, args: Args): Promise<unknown> {
       return deleteEmployeeTool(args);
     case "assign_employee":
       return assignEmployeeTool(args);
+    case "update_assignment":
+      return updateAssignmentTool(args);
     case "unassign_employee":
       return unassignEmployeeTool(args);
     case "ask_user":
@@ -1053,6 +1073,41 @@ async function assignEmployeeTool(args: Args) {
     fee: Number(args.fee) || 0,
     isManager: args.isManager === true,
   };
+}
+
+async function updateAssignmentTool(args: Args) {
+  const proj = await resolveProject(args);
+  if (!proj) return { error: "Proyek tidak ditemukan." };
+  const emp = await resolveEmployee(args);
+  if (!emp) return { error: "Karyawan tidak ditemukan." };
+  const assignment = await db.projectAssignment.findFirst({
+    where: { projectId: proj.id, employeeId: emp.id },
+    select: { id: true },
+  });
+  if (!assignment)
+    return { error: `${emp.name} belum ditugaskan di proyek ${proj.name}. Pakai assign_employee dulu.` };
+
+  const data: Prisma.ProjectAssignmentUpdateInput = {};
+  const notes: string[] = [];
+  if (typeof args.isManager === "boolean") data.isManager = args.isManager;
+  if (args.fee != null && Number.isFinite(Number(args.fee))) data.fee = Number(args.fee);
+  if (args.feeStatus === "pending" || args.feeStatus === "paid") data.feeStatus = args.feeStatus;
+  if (typeof args.roleName === "string") {
+    if (!args.roleName.trim()) data.role = { disconnect: true };
+    else {
+      const role = await db.role.findFirst({
+        where: { name: { contains: args.roleName.trim(), mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (role) data.role = { connect: { id: role.id } };
+      else notes.push(`Role "${args.roleName}" tidak ada di taxonomy — role tidak diubah.`);
+    }
+  }
+  if (Object.keys(data).length === 0) return { error: "Tidak ada perubahan yang diberikan." };
+
+  await db.projectAssignment.update({ where: { id: assignment.id }, data });
+  touch();
+  return { ok: true, project: proj.name, employee: emp.name, updatedFields: Object.keys(data), notes };
 }
 
 async function unassignEmployeeTool(args: Args) {

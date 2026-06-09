@@ -16,10 +16,12 @@ function cellToString(value: unknown): string {
 }
 
 async function pdfText(buf: Buffer): Promise<string> {
-  const { PDFParse } = await import("pdf-parse");
-  const parser = new PDFParse({ data: buf });
-  const out = await parser.getText();
-  return out.text;
+  // unpdf ships a serverless-safe pdfjs build (no external font/cmap files),
+  // which works on Vercel where pdf-parse/pdfjs fails to load data files.
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  const pdf = await getDocumentProxy(new Uint8Array(buf));
+  const { text } = await extractText(pdf, { mergePages: true });
+  return Array.isArray(text) ? text.join("\n") : text;
 }
 
 async function xlsxText(buf: Buffer): Promise<string> {
