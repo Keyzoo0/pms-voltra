@@ -284,6 +284,33 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="px-0 pb-0">
             {activeProjects.length > 0 ? (
+              <>
+              {/* Mobile: cards */}
+              <div className="divide-y divide-border/60 md:hidden">
+                {activeProjects.slice(0, 6).map((p) => (
+                  <Link key={p.id} href={`/projects/${p.id}`} className="block p-4 transition-colors hover:bg-muted/40">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{p.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{p.client?.name ?? "Tanpa klien"}</p>
+                      </div>
+                      <StatusBadge meta={PROJECT_STATUS[p.status as ProjectStatus]} />
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Progress value={p.progress} className="w-24" />
+                        <span className="text-xs tabular-nums text-muted-foreground">{p.progress}%</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{formatDate(p.deadline)}</span>
+                        {trackBadge(p.deadline)}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+              {/* Desktop: table */}
+              <div className="hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -332,6 +359,8 @@ export default async function DashboardPage() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
+              </>
             ) : (
               <div className="p-5">
                 <EmptyState

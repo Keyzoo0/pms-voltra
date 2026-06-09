@@ -136,6 +136,40 @@ export default async function FinancePage({
         </CardHeader>
         <CardContent className="px-0 pb-0">
           {rows.length ? (
+            <>
+            {/* Mobile: cards */}
+            <div className="divide-y divide-border/60 md:hidden">
+              {rows.map(({ p, fin }) => (
+                <Link key={p.id} href={`/projects/${p.id}`} className="block p-4 transition-colors hover:bg-muted/40">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 truncate font-medium">{p.name}</p>
+                    <StatusBadge meta={PROJECT_STATUS[p.status as ProjectStatus]} />
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <span className="text-muted-foreground">Omzet</span>
+                    <span className="text-right tabular-nums">{formatIDR(fin.revenue)}</span>
+                    <span className="text-muted-foreground">Profit</span>
+                    <span className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                      {formatIDR(fin.profit)} · {(fin.margin * 100).toFixed(0)}%
+                    </span>
+                    <span className="text-muted-foreground">Outstanding</span>
+                    <span className="text-right tabular-nums">
+                      {fin.outstanding > 0 ? (
+                        <span className="text-amber-600 dark:text-amber-400">{formatIDR(fin.outstanding)}</span>
+                      ) : (
+                        "—"
+                      )}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-muted/40 p-4 text-sm font-semibold">
+                <span>Total Profit</span>
+                <span className="text-right tabular-nums">{formatIDR(totalProfit)}</span>
+              </div>
+            </div>
+            {/* Desktop: table */}
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -189,6 +223,8 @@ export default async function FinancePage({
                 </TableRow>
               </TableFooter>
             </Table>
+            </div>
+            </>
           ) : (
             <div className="p-5">
               <EmptyState icon={Wallet} title="Belum ada data keuangan" description="Tambahkan proyek untuk melihat laporan." />

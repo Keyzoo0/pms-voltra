@@ -31,11 +31,11 @@ export function StatCard({
   };
 
   return (
-    <Card className={cn("p-5", className)}>
+    <Card className={cn("p-4 sm:p-5", className)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+          <p className="mt-2 truncate text-xl font-semibold tracking-tight text-foreground tabular-nums sm:text-2xl">
             {value}
           </p>
           {hint && (
@@ -45,11 +45,11 @@ export function StatCard({
         {Icon && (
           <div
             className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset",
+              "flex size-9 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset sm:size-10",
               accents[accent],
             )}
           >
-            <Icon className="size-5" />
+            <Icon className="size-4.5 sm:size-5" />
           </div>
         )}
       </div>

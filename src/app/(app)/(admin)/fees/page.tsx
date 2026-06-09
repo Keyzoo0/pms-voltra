@@ -100,6 +100,32 @@ export default async function FeesPage({
       <Card>
         <CardContent className="px-0 pb-0">
           {recaps.length ? (
+            <>
+            {/* Mobile: cards */}
+            <div className="divide-y divide-border/60 md:hidden">
+              {recaps.map((r) => (
+                <Link key={r.id} href={`/employees/${r.id}`} className="flex items-center gap-3 p-4 transition-colors hover:bg-muted/40">
+                  <Avatar name={r.name} className="size-9" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate font-medium">{r.name}</p>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums">{formatIDR(r.total)}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                      <span className="text-muted-foreground">{r.count} assignment</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">cair {formatIDR(r.paid)}</span>
+                      <span className="text-amber-600 dark:text-amber-400">pending {formatIDR(r.pending)}</span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+              <div className="flex items-center justify-between gap-2 bg-muted/40 p-4 text-sm font-semibold">
+                <span>Total</span>
+                <span className="tabular-nums">{formatIDR(grandTotal)}</span>
+              </div>
+            </div>
+            {/* Desktop: table */}
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -145,6 +171,8 @@ export default async function FeesPage({
                 </TableRow>
               </TableFooter>
             </Table>
+            </div>
+            </>
           ) : (
             <div className="p-5">
               <EmptyState

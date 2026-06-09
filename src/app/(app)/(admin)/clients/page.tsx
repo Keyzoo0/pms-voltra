@@ -43,6 +43,39 @@ export default async function ClientsPage() {
       <Card>
         <CardContent className="px-0 pb-0">
           {clients.length ? (
+            <>
+            {/* Mobile: cards */}
+            <div className="divide-y divide-border/60 md:hidden">
+              {clients.map((c) => {
+                const live = c.projects.filter((p) => p.status !== "cancelled");
+                const totalValue = live.reduce((s, p) => s + computeProjectFinance(p).revenue, 0);
+                const outstanding = live.reduce((s, p) => s + computeProjectFinance(p).outstanding, 0);
+                return (
+                  <Link key={c.id} href={`/clients/${c.id}`} className="flex items-start gap-3 p-4 transition-colors hover:bg-muted/40">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Building2 className="size-4.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{c.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {c.picName ? `PIC: ${c.picName}` : ""}{c.picName && c.contact ? " · " : ""}{c.contact ?? ""}
+                        {!c.picName && !c.contact ? "—" : ""}
+                      </p>
+                      <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                        <span className="text-muted-foreground">{c.projects.length} proyek · {formatIDR(totalValue)}</span>
+                        {outstanding > 0 ? (
+                          <span className="shrink-0 font-medium text-amber-600 tabular-nums dark:text-amber-400">sisa {formatIDR(outstanding)}</span>
+                        ) : (
+                          <span className="shrink-0 text-muted-foreground">Lunas</span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+            {/* Desktop: table */}
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -102,6 +135,8 @@ export default async function ClientsPage() {
                 })}
               </TableBody>
             </Table>
+            </div>
+            </>
           ) : (
             <div className="p-5">
               <EmptyState

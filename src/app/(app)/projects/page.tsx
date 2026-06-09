@@ -56,6 +56,35 @@ export default async function ProjectsPage({
         <Card>
           <CardContent className="px-0 pb-0">
             {projects.length ? (
+              <>
+              {/* Mobile: cards */}
+              <div className="divide-y divide-border/60 md:hidden">
+                {projects.map((p) => (
+                  <Link key={p.id} href={`/projects/${p.id}`} className="block p-4 transition-colors hover:bg-muted/40">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium">{p.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{p.client?.name ?? "—"}</p>
+                      </div>
+                      <StatusBadge meta={PROJECT_STATUS[p.status as ProjectStatus]} />
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Progress value={p.progress} className="w-20" />
+                        <span className="text-xs tabular-nums text-muted-foreground">{p.progress}%</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{formatDate(p.deadline)}</span>
+                        {p.assignments[0]?.isManager && (
+                          <Badge variant="default" className="gap-1"><Crown className="size-3" /> PM</Badge>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+              {/* Desktop: table */}
+              <div className="hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -103,6 +132,8 @@ export default async function ProjectsPage({
                   ))}
                 </TableBody>
               </Table>
+              </div>
+              </>
             ) : (
               <div className="p-5">
                 <EmptyState
@@ -172,6 +203,52 @@ export default async function ProjectsPage({
       <Card>
         <CardContent className="px-0 pb-0">
           {projects.length > 0 ? (
+            <>
+            {/* Mobile: cards */}
+            <div className="divide-y divide-border/60 md:hidden">
+              {projects.map((p) => {
+                const fin = computeProjectFinance(p);
+                const d = daysUntil(p.deadline);
+                return (
+                  <Link key={p.id} href={`/projects/${p.id}`} className="block p-4 transition-colors hover:bg-muted/40">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium">{p.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{p.client?.name ?? "Tanpa klien"}</p>
+                      </div>
+                      <StatusBadge meta={PROJECT_STATUS[p.status as ProjectStatus]} />
+                    </div>
+                    {p.categories.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {p.categories.slice(0, 3).map((c) => (
+                          <Badge key={c.id} variant="secondary" className="text-[10px]">{c.name}</Badge>
+                        ))}
+                        {p.categories.length > 3 && (
+                          <Badge variant="secondary" className="text-[10px]">+{p.categories.length - 3}</Badge>
+                        )}
+                      </div>
+                    )}
+                    <div className="mt-3 flex items-end justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Progress value={p.progress} className="w-20" />
+                        <span className="text-xs tabular-nums text-muted-foreground">{p.progress}%</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium tabular-nums">{formatIDR(fin.revenue)}</p>
+                        {fin.outstanding > 0 && (
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400">sisa {formatIDR(fin.outstanding)}</p>
+                        )}
+                        {d !== null && d < 0 && p.status !== "closed" && p.status !== "paid" && (
+                          <p className="text-[11px] text-rose-600 dark:text-rose-400">telat {Math.abs(d)}h</p>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+            {/* Desktop: table */}
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -235,6 +312,8 @@ export default async function ProjectsPage({
                 })}
               </TableBody>
             </Table>
+            </div>
+            </>
           ) : (
             <div className="p-5">
               <EmptyState

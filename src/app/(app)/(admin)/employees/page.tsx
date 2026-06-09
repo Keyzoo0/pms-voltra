@@ -60,6 +60,51 @@ export default async function EmployeesPage() {
       <Card>
         <CardContent className="px-0 pb-0">
           {employees.length ? (
+            <>
+            {/* Mobile: cards */}
+            <div className="divide-y divide-border/60 md:hidden">
+              {employees.map((e) => {
+                const activeProjects = e.assignments.filter((a) =>
+                  ACTIVE_STATUSES.includes(a.project.status as ProjectStatus),
+                ).length;
+                const totalFee = e.assignments.reduce((s, a) => s + toNum(a.fee), 0);
+                return (
+                  <Link
+                    key={e.id}
+                    href={`/employees/${e.id}`}
+                    className="flex items-center gap-3 p-4 transition-colors hover:bg-muted/40"
+                  >
+                    <Avatar name={e.name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate font-medium">{e.name}</p>
+                        {e.status === "inactive" ? (
+                          <StatusBadge meta={EMPLOYEE_STATUS["inactive" as EmployeeStatus]} />
+                        ) : activeProjects > 0 ? (
+                          <Badge variant="default" className="shrink-0">{activeProjects} aktif</Badge>
+                        ) : (
+                          <Badge variant="warning" className="shrink-0">Idle</Badge>
+                        )}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {e.roles.slice(0, 3).map((r) => (
+                          <Badge key={r.id} variant="secondary" className="text-[10px]">{r.name}</Badge>
+                        ))}
+                        {e.roles.length > 3 && (
+                          <Badge variant="secondary" className="text-[10px]">+{e.roles.length - 3}</Badge>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span className="truncate">{e.contact ?? "—"}</span>
+                        <span className="shrink-0 font-medium tabular-nums text-foreground">{formatIDR(totalFee)}</span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+            {/* Desktop: table */}
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -131,6 +176,8 @@ export default async function EmployeesPage() {
                 })}
               </TableBody>
             </Table>
+            </div>
+            </>
           ) : (
             <div className="p-5">
               <EmptyState
