@@ -1,182 +1,87 @@
 "use client";
 
+import { memo } from "react";
 import Link from "next/link";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 
-function renderInline(text: string, keyPrefix: string) {
-  const nodes: React.ReactNode[] = [];
-  const regex = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  let i = 0;
-  while ((m = regex.exec(text)) !== null) {
-    if (m.index > last) nodes.push(text.slice(last, m.index));
-    const tok = m[0];
-    const key = `${keyPrefix}-${i++}`;
-    if (tok.startsWith("**")) {
-      nodes.push(<strong key={key}>{tok.slice(2, -2)}</strong>);
-    } else if (tok.startsWith("`")) {
-      nodes.push(
-        <code key={key} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
-          {tok.slice(1, -1)}
-        </code>,
-      );
-    } else {
-      const mm = /\[([^\]]+)\]\(([^)]+)\)/.exec(tok)!;
-      const [, label, href] = mm;
-      nodes.push(
-        href.startsWith("/") ? (
-          <Link key={key} href={href} className="font-medium text-primary hover:underline">
-            {label}
-          </Link>
-        ) : (
-          <a key={key} href={href} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
-            {label}
-          </a>
-        ),
-      );
-    }
-    last = m.index + tok.length;
-  }
-  if (last < text.length) nodes.push(text.slice(last));
-  return nodes;
-}
+/**
+ * Full GFM renderer for assistant replies (react-markdown + remark-gfm):
+ * blockquotes, horizontal rules, em/strong/strikethrough, nested & task
+ * lists, tables, fenced code — styled to match the app, Claude/Qwen-grade.
+ */
 
-function splitRow(line: string): string[] {
-  return line.replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
-}
+const components: Components = {
+  p: ({ children }) => <p className="my-1.5 leading-relaxed first:mt-0 last:mb-0">{children}</p>,
+  a: ({ href, children }) => {
+    const url = href ?? "#";
+    return url.startsWith("/") ? (
+      <Link href={url} className="font-medium text-primary underline-offset-2 hover:underline">
+        {children}
+      </Link>
+    ) : (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="font-medium text-primary underline-offset-2 hover:underline"
+      >
+        {children}
+      </a>
+    );
+  },
+  h1: ({ children }) => <h3 className="mt-3 mb-1.5 text-base font-bold first:mt-0">{children}</h3>,
+  h2: ({ children }) => <h4 className="mt-3 mb-1.5 text-[15px] font-bold first:mt-0">{children}</h4>,
+  h3: ({ children }) => <h5 className="mt-2.5 mb-1 text-sm font-semibold first:mt-0">{children}</h5>,
+  h4: ({ children }) => <h6 className="mt-2.5 mb-1 text-sm font-semibold first:mt-0">{children}</h6>,
+  ul: ({ children }) => (
+    <ul className="my-1.5 ml-4 list-disc space-y-1 marker:text-muted-foreground/70">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="my-1.5 ml-4 list-decimal space-y-1 marker:font-medium marker:text-muted-foreground">
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => <li className="pl-0.5 leading-relaxed [&>ul]:my-1 [&>ol]:my-1">{children}</li>,
+  blockquote: ({ children }) => (
+    <blockquote className="my-2 rounded-r-lg border-l-2 border-primary/50 bg-muted/40 py-2 pl-3 pr-3 text-foreground/90 [&>p]:my-1">
+      {children}
+    </blockquote>
+  ),
+  hr: () => <hr className="my-3 border-border/60" />,
+  del: ({ children }) => <del className="opacity-70">{children}</del>,
+  pre: ({ children }) => (
+    <pre className="my-2 overflow-x-auto rounded-lg border border-border/60 bg-muted/60 p-3 font-mono text-xs leading-relaxed">
+      {children}
+    </pre>
+  ),
+  code: ({ className, children }) => {
+    const isBlock = /language-/.test(className ?? "") || String(children).includes("\n");
+    if (isBlock) return <code className={className}>{children}</code>;
+    return (
+      <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">{children}</code>
+    );
+  },
+  table: ({ children }) => (
+    <div className="my-2 overflow-x-auto rounded-lg border border-border/60">
+      <table className="w-full text-xs sm:text-sm">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="border-b border-border/60 bg-muted/50">{children}</thead>,
+  tr: ({ children }) => <tr className="border-b border-border/40 last:border-0">{children}</tr>,
+  th: ({ children }) => <th className="px-2.5 py-1.5 text-left font-semibold">{children}</th>,
+  td: ({ children }) => <td className="px-2.5 py-1.5 align-top">{children}</td>,
+  input: ({ checked }) => (
+    <input type="checkbox" checked={!!checked} readOnly className="mr-1.5 size-3.5 accent-primary align-[-2px]" />
+  ),
+};
 
-const isTableSeparator = (line: string) => /^\|?[\s:|-]+\|?$/.test(line) && line.includes("-");
-
-export function Markdown({ text }: { text: string }) {
-  const lines = text.split("\n");
-  const out: React.ReactNode[] = [];
-  let bullets: string[] = [];
-  let numbered: string[] = [];
-
-  const flushLists = () => {
-    if (bullets.length) {
-      out.push(
-        <ul key={`ul-${out.length}`} className="my-1.5 ml-1 space-y-1">
-          {bullets.map((b, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="mt-2 size-1 shrink-0 rounded-full bg-current opacity-50" />
-              <span className="min-w-0">{renderInline(b, `li-${out.length}-${i}`)}</span>
-            </li>
-          ))}
-        </ul>,
-      );
-      bullets = [];
-    }
-    if (numbered.length) {
-      out.push(
-        <ol key={`ol-${out.length}`} className="my-1.5 ml-1 space-y-1">
-          {numbered.map((b, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="w-4 shrink-0 text-right text-xs font-medium tabular-nums opacity-60">
-                {i + 1}.
-              </span>
-              <span className="min-w-0">{renderInline(b, `ni-${out.length}-${i}`)}</span>
-            </li>
-          ))}
-        </ol>,
-      );
-      numbered = [];
-    }
-  };
-
-  let idx = 0;
-  while (idx < lines.length) {
-    const raw = lines[idx];
-    const t = raw.trim();
-
-    // Fenced code block.
-    if (t.startsWith("```")) {
-      flushLists();
-      const code: string[] = [];
-      idx++;
-      while (idx < lines.length && !lines[idx].trim().startsWith("```")) {
-        code.push(lines[idx]);
-        idx++;
-      }
-      idx++; // skip closing fence
-      out.push(
-        <pre
-          key={`code-${out.length}`}
-          className="my-2 overflow-x-auto rounded-lg border border-border/60 bg-muted/60 p-3 font-mono text-xs leading-relaxed"
-        >
-          <code>{code.join("\n")}</code>
-        </pre>,
-      );
-      continue;
-    }
-
-    // Table: header row + separator row.
-    if (t.startsWith("|") && idx + 1 < lines.length && isTableSeparator(lines[idx + 1].trim())) {
-      flushLists();
-      const header = splitRow(t);
-      idx += 2;
-      const rows: string[][] = [];
-      while (idx < lines.length && lines[idx].trim().startsWith("|")) {
-        rows.push(splitRow(lines[idx].trim()));
-        idx++;
-      }
-      out.push(
-        <div key={`tbl-${out.length}`} className="my-2 overflow-x-auto rounded-lg border border-border/60">
-          <table className="w-full text-xs sm:text-sm">
-            <thead>
-              <tr className="border-b border-border/60 bg-muted/50">
-                {header.map((h, i) => (
-                  <th key={i} className="px-2.5 py-1.5 text-left font-semibold">
-                    {renderInline(h, `th-${out.length}-${i}`)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, ri) => (
-                <tr key={ri} className="border-b border-border/40 last:border-0">
-                  {r.map((c, ci) => (
-                    <td key={ci} className="px-2.5 py-1.5 align-top">
-                      {renderInline(c, `td-${out.length}-${ri}-${ci}`)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>,
-      );
-      continue;
-    }
-
-    const bullet = /^[-*]\s+(.*)/.exec(t);
-    const num = /^\d+[.)]\s+(.*)/.exec(t);
-    const heading = /^(#{1,4})\s+(.*)/.exec(t);
-
-    if (bullet) {
-      if (numbered.length) flushLists();
-      bullets.push(bullet[1]);
-    } else if (num) {
-      if (bullets.length) flushLists();
-      numbered.push(num[1]);
-    } else {
-      flushLists();
-      if (heading) {
-        out.push(
-          <p key={`h-${idx}`} className="mt-2.5 mb-1 text-sm font-semibold">
-            {renderInline(heading[2], `h-${idx}`)}
-          </p>,
-        );
-      } else if (t) {
-        out.push(
-          <p key={`p-${idx}`} className="leading-relaxed">
-            {renderInline(t, `p-${idx}`)}
-          </p>,
-        );
-      }
-    }
-    idx++;
-  }
-  flushLists();
-  return <div className="space-y-1.5 text-sm">{out}</div>;
-}
+export const Markdown = memo(function Markdown({ text }: { text: string }) {
+  return (
+    <div className="text-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+});
