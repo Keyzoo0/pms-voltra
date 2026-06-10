@@ -16,7 +16,10 @@ import {
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
+  RefreshCw,
   Sparkles,
+  Square,
   Trash2,
   UploadCloud,
   UserPlus,
@@ -33,12 +36,14 @@ type Attachment =
   | { kind: "document"; name: string; text: string; mime?: string };
 
 type Msg = {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   toolsUsed?: string[];
   attachments?: Attachment[];
   options?: string[];
   error?: boolean;
+  stopped?: boolean;
 };
 
 type Pending = {
@@ -109,7 +114,13 @@ function relTime(iso: string): string {
   return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
 }
 
-function mapStored(m: { role: string; content: string; toolsUsed: string[]; attachments: unknown }): Msg {
+function mapStored(m: {
+  id: string;
+  role: string;
+  content: string;
+  toolsUsed: string[];
+  attachments: unknown;
+}): Msg {
   const att = m.attachments;
   let attachments: Attachment[] | undefined;
   let options: string[] | undefined;
@@ -118,6 +129,7 @@ function mapStored(m: { role: string; content: string; toolsUsed: string[]; atta
     options = ((att as { options?: unknown }).options as string[]) ?? [];
   }
   return {
+    id: m.id,
     role: m.role === "assistant" ? "assistant" : "user",
     content: m.content,
     toolsUsed: m.toolsUsed,
@@ -125,6 +137,16 @@ function mapStored(m: { role: string; content: string; toolsUsed: string[]; atta
     options,
   };
 }
+
+type SendOpts = {
+  /** Re-send an edited user message: replaces it and everything after it. */
+  replaceFromId?: string;
+  replaceIdx?: number;
+  /** Re-run the last user message (regenerate the answer). */
+  regenerate?: boolean;
+  /** Explicit attachments (edit flow) — bypasses the pending uploads. */
+  attachments?: Attachment[];
+};
 
 export function AssistantWorkspace({ initialChats }: { initialChats: ChatListItem[] }) {
   const [chats, setChats] = useState<ChatListItem[]>(initialChats);
@@ -134,11 +156,15 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
   const [pending, setPending] = useState<Pending[]>([]);
   const [loading, setLoading] = useState(false);
   const [liveStatus, setLiveStatus] = useState("");
+  const [streamText, setStreamText] = useState("");
+  const [reasonText, setReasonText] = useState("");
   const [loadingChat, setLoadingChat] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
 
   useEffect(() => {
     setHistoryCollapsed(localStorage.getItem("voltra_ai_history_collapsed") === "1");
@@ -155,10 +181,19 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const loadingRef = useRef(false);
+  const atBottomRef = useRef(true);
+  // Bumped when switching/clearing chats so an aborted in-flight turn can't
+  // leak its partial answer into the newly opened conversation.
+  const epochRef = useRef(0);
 
+  // Auto-scroll only while the reader is following the bottom of the chat.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, loading]);
+    const el = scrollRef.current;
+    if (!el || !atBottomRef.current) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: streamText ? "auto" : "smooth" });
+  }, [messages, loading, streamText, reasonText]);
 
   // Auto-grow the composer with its content (capped via max-h class).
   useEffect(() => {
@@ -197,10 +232,13 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
   }, [chats]);
 
   function startNewChat() {
+    abortRef.current?.abort();
+    epochRef.current++;
     setActiveId(null);
     setMessages([]);
     setPending([]);
     setInput("");
+    setEditingIdx(null);
     setShowSidebar(false);
     localStorage.removeItem("voltra_ai_last_chat");
     taRef.current?.focus();
@@ -208,8 +246,11 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
 
   async function openChat(id: string) {
     if (id === activeId) return setShowSidebar(false);
+    abortRef.current?.abort();
+    epochRef.current++;
     setActiveId(id);
     setShowSidebar(false);
+    setEditingIdx(null);
     localStorage.setItem("voltra_ai_last_chat", id);
     setLoadingChat(true);
     setMessages([]);
@@ -227,6 +268,21 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
     if (last && initialChats.some((c) => c.id === last)) void openChat(last);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Re-read the chat from the server (gains message ids, heals any drift). */
+  async function syncMessages(chatId: string) {
+    try {
+      const stored = await getChatMessages(chatId);
+      if (loadingRef.current) return; // a new turn started — don't clobber it
+      if (stored.length > 0) setMessages(stored.map(mapStored));
+    } catch {}
+  }
+
+  async function refreshChats() {
+    try {
+      setChats(await listChats());
+    } catch {}
+  }
 
   async function removeChat(id: string) {
     if (!confirm("Hapus percakapan ini?")) return;
@@ -262,19 +318,60 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
 
   const uploading = pending.some((p) => p.status === "uploading");
 
-  async function send(text: string) {
+  async function send(text: string, opts: SendOpts = {}) {
     const content = text.trim();
-    const atts = pending.filter((p) => p.status === "done" && p.att).map((p) => p.att!) as Attachment[];
-    if ((!content && atts.length === 0) || loading || uploading) return;
+    const atts =
+      opts.attachments ??
+      (pending.filter((p) => p.status === "done" && p.att).map((p) => p.att!) as Attachment[]);
+    if (loading || uploading) return;
+    if (!opts.regenerate && !content && atts.length === 0) return;
 
-    setMessages((m) => [...m, { role: "user", content, attachments: atts.length ? atts : undefined }]);
-    setInput("");
-    setPending([]);
+    // Optimistic local state for each flow.
+    if (opts.regenerate) {
+      setMessages((m) => {
+        let i = m.length - 1;
+        while (i >= 0 && m[i].role === "assistant") i--;
+        return m.slice(0, i + 1);
+      });
+    } else if (opts.replaceFromId && opts.replaceIdx != null) {
+      const idx = opts.replaceIdx;
+      setMessages((m) => [
+        ...m.slice(0, idx),
+        { role: "user", content, attachments: atts.length ? atts : undefined },
+      ]);
+    } else {
+      setMessages((m) => [...m, { role: "user", content, attachments: atts.length ? atts : undefined }]);
+      setInput("");
+      setPending([]);
+    }
+    setEditingIdx(null);
     setLoading(true);
+    loadingRef.current = true;
     setLiveStatus("");
+    setStreamText("");
+    setReasonText("");
+
+    const ac = new AbortController();
+    abortRef.current = ac;
+    const epoch = ++epochRef.current;
+
+    let chatIdNow = activeId;
+    let metaTitle = "";
+    let streamed = ""; // mirror of streamText for non-stale access in catch
+    let syncAfter: string | null = null;
 
     const fail = (msg: string) =>
       setMessages((m) => [...m, { role: "assistant", error: true, content: `⚠️ ${msg}` }]);
+
+    const commitChat = (id: string, title: string) => {
+      setActiveId(id);
+      localStorage.setItem("voltra_ai_last_chat", id);
+      setChats((c) => {
+        const prev = c.find((x) => x.id === id);
+        const without = c.filter((x) => x.id !== id);
+        return [{ id, title: title || prev?.title || "Percakapan baru", updatedAt: new Date().toISOString() }, ...without];
+      });
+    };
 
     const handleDone = (data: {
       chatId: string;
@@ -285,12 +382,10 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
       options?: string[];
       toolsUsed?: string[];
     }) => {
-      if (!activeId) setActiveId(data.chatId);
-      localStorage.setItem("voltra_ai_last_chat", data.chatId);
-      setChats((c) => {
-        const without = c.filter((x) => x.id !== data.chatId);
-        return [{ id: data.chatId, title: data.title, updatedAt: new Date().toISOString() }, ...without];
-      });
+      commitChat(data.chatId, data.title);
+      setStreamText("");
+      setReasonText("");
+      setLiveStatus("");
       if (data.resultType === "question") {
         setMessages((m) => [
           ...m,
@@ -299,13 +394,21 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
       } else {
         setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "", toolsUsed: data.toolsUsed }]);
       }
+      syncAfter = data.chatId;
     };
 
     try {
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ chatId: activeId, content, attachments: atts }),
+        signal: ac.signal,
+        body: JSON.stringify({
+          chatId: activeId,
+          content,
+          attachments: atts,
+          replaceFromId: opts.replaceFromId,
+          regenerate: opts.regenerate,
+        }),
       });
 
       if (!res.ok) {
@@ -318,7 +421,7 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
         return;
       }
 
-      // Stream NDJSON progress events until "done"/"error".
+      // Stream NDJSON: meta → status / deltas / reasoning → done | aborted | error.
       const reader = res.body?.getReader();
       if (!reader) {
         fail("Browser tidak mendukung streaming respons.");
@@ -335,7 +438,20 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
         } catch {
           return;
         }
-        if (ev.type === "status") {
+        if (ev.type === "meta") {
+          chatIdNow = String(ev.chatId);
+          metaTitle = String(ev.title ?? "");
+        } else if (ev.type === "delta") {
+          const t = String(ev.text ?? "");
+          streamed += t;
+          setStreamText((s) => s + t);
+        } else if (ev.type === "reasoning") {
+          setReasonText((s) => (s + String(ev.text ?? "")).slice(-400));
+        } else if (ev.type === "status") {
+          // A new agent round starts — pre-tool commentary is superseded.
+          streamed = "";
+          setStreamText("");
+          setReasonText("");
           if (ev.kind === "thinking") setLiveStatus("Berpikir…");
           else if (ev.kind === "tools" && Array.isArray(ev.tools)) {
             const labels = [...new Set(ev.tools.map((t) => TOOL_LABELS[String(t)] ?? String(t)))];
@@ -344,6 +460,8 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
         } else if (ev.type === "done") {
           finished = true;
           handleDone(ev as Parameters<typeof handleDone>[0]);
+        } else if (ev.type === "aborted") {
+          finished = true;
         } else if (ev.type === "error") {
           finished = true;
           fail(
@@ -351,6 +469,10 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
               ? "API key AI belum dikonfigurasi di server."
               : String(ev.error ?? "Gagal menghubungi asisten."),
           );
+          if (ev.rolledBack === true && !activeId) {
+            chatIdNow = null;
+            localStorage.removeItem("voltra_ai_last_chat");
+          }
         }
       };
       for (;;) {
@@ -364,14 +486,56 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
         }
       }
       handleLine(buf);
-      if (!finished) fail("Respons terputus. Coba muat ulang percakapan — hasil mungkin sudah tersimpan.");
+      if (!finished) {
+        fail("Respons terputus. Coba muat ulang percakapan — hasil mungkin sudah tersimpan.");
+        if (chatIdNow) syncAfter = chatIdNow;
+      }
     } catch {
-      fail("Koneksi gagal. Coba lagi.");
+      if (ac.signal.aborted) {
+        // User pressed stop — keep whatever was streamed as the answer.
+        // If the abort came from switching chats, leave the new chat alone.
+        if (epochRef.current === epoch) {
+          const partial = streamed.trim();
+          if (partial) {
+            setMessages((m) => [...m, { role: "assistant", content: partial, stopped: true }]);
+          }
+          if (chatIdNow) {
+            commitChat(chatIdNow, metaTitle);
+            syncAfter = chatIdNow;
+          }
+        }
+      } else {
+        fail("Koneksi gagal. Coba lagi.");
+      }
     } finally {
+      if (abortRef.current === ac) abortRef.current = null;
       setLoading(false);
+      loadingRef.current = false;
       setLiveStatus("");
-      taRef.current?.focus();
+      setStreamText("");
+      setReasonText("");
+      if (epochRef.current === epoch) {
+        if (syncAfter) void syncMessages(syncAfter);
+        taRef.current?.focus();
+      }
+      void refreshChats();
     }
+  }
+
+  function stopGeneration() {
+    abortRef.current?.abort();
+  }
+
+  function beginEdit(idx: number, m: Msg) {
+    if (loading || !m.id) return;
+    setEditingIdx(idx);
+    setEditText(m.content);
+  }
+
+  function saveEdit(idx: number, m: Msg) {
+    const t = editText.trim();
+    if (!t && !(m.attachments?.length)) return;
+    void send(t, { replaceFromId: m.id, replaceIdx: idx, attachments: m.attachments ?? [] });
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -380,6 +544,9 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
       send(input);
     }
   }
+
+  const lastIdx = messages.length - 1;
+  const canRegenerate = !loading && !loadingChat && !!activeId && messages.length > 0;
 
   return (
     <div className="relative flex h-[calc(100dvh-3.5rem)] min-h-[28rem] overflow-hidden lg:h-dvh">
@@ -495,7 +662,14 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
         </div>
 
         {/* messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-5">
+        <div
+          ref={scrollRef}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          }}
+          className="flex-1 overflow-y-auto px-4 py-5"
+        >
           <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-4">
           {loadingChat ? (
             <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -527,31 +701,87 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
             </div>
           ) : (
             messages.map((m, i) => (
-              <Fragment key={i}>
+              <Fragment key={m.id ?? `local-${i}`}>
                 {m.role === "user" ? (
-                  <div className="flex flex-col items-end gap-1.5">
-                    {m.attachments && m.attachments.length > 0 && (
-                      <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
-                        {m.attachments.map((a, j) =>
-                          a.kind === "image" ? (
-                            <a key={j} href={a.url} target="_blank" rel="noreferrer">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={a.url} alt={a.name} className="h-24 w-24 rounded-lg border border-border object-cover" />
-                            </a>
-                          ) : (
-                            <span key={j} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs">
-                              <FileText className="size-3.5 text-primary" /> {a.name}
-                            </span>
-                          ),
-                        )}
+                  editingIdx === i ? (
+                    <div className="flex justify-end">
+                      <div className="w-full max-w-[85%] rounded-2xl border border-primary/40 bg-background p-2 shadow-sm">
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              saveEdit(i, m);
+                            }
+                            if (e.key === "Escape") setEditingIdx(null);
+                          }}
+                          rows={Math.min(6, Math.max(2, editText.split("\n").length))}
+                          autoFocus
+                          className="w-full resize-none bg-transparent px-1.5 py-1 text-sm outline-none"
+                        />
+                        <div className="flex items-center justify-end gap-1.5 pt-1">
+                          <Button size="sm" variant="ghost" onClick={() => setEditingIdx(null)}>
+                            Batal
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => saveEdit(i, m)}
+                            disabled={!editText.trim() && !(m.attachments?.length)}
+                          >
+                            <CornerDownLeft className="size-3.5" /> Kirim ulang
+                          </Button>
+                        </div>
                       </div>
-                    )}
-                    {m.content && (
-                      <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
-                        {m.content}
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="group/u flex flex-col items-end gap-1.5">
+                      {m.attachments && m.attachments.length > 0 && (
+                        <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
+                          {m.attachments.map((a, j) =>
+                            a.kind === "image" ? (
+                              <a key={j} href={a.url} target="_blank" rel="noreferrer">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={a.url} alt={a.name} className="h-24 w-24 rounded-lg border border-border object-cover" />
+                              </a>
+                            ) : (
+                              <span key={j} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs">
+                                <FileText className="size-3.5 text-primary" /> {a.name}
+                              </span>
+                            ),
+                          )}
+                        </div>
+                      )}
+                      {(m.content || m.id) && (
+                        <div className="flex max-w-[85%] items-end gap-1.5">
+                          {m.id && !loading && (
+                            <button
+                              type="button"
+                              onClick={() => beginEdit(i, m)}
+                              title="Edit & kirim ulang"
+                              className="mb-1 shrink-0 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/u:opacity-100"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                          )}
+                          {m.content && (
+                            <div className="min-w-0 whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
+                              {m.content}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {i === lastIdx && canRegenerate && (
+                        <button
+                          type="button"
+                          onClick={() => send("", { regenerate: true })}
+                          className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <RefreshCw className="size-3" /> Lanjutkan respons
+                        </button>
+                      )}
+                    </div>
+                  )
                 ) : (
                   <div className="group flex gap-2.5">
                     <span
@@ -570,6 +800,11 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
                         )}
                       >
                         <Markdown text={m.content} />
+                        {m.stopped && (
+                          <p className="mt-1.5 text-[11px] italic text-muted-foreground">
+                            ⏹ Dihentikan — jawaban belum selesai.
+                          </p>
+                        )}
                         {!m.error && (
                           <button
                             type="button"
@@ -609,6 +844,15 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
                           ))}
                         </div>
                       )}
+                      {i === lastIdx && canRegenerate && (
+                        <button
+                          type="button"
+                          onClick={() => send("", { regenerate: true })}
+                          className="mt-1.5 inline-flex items-center gap-1 rounded-full px-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <RefreshCw className="size-3" /> {m.error ? "Coba lagi" : "Ulangi respons"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -621,9 +865,27 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
               <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Sparkles className="size-3.5" />
               </span>
-              <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-border bg-background px-3.5 py-2.5 text-sm text-muted-foreground">
-                <Loader2 className="size-3.5 shrink-0 animate-spin" />
-                <span className="animate-pulse">{liveStatus || "Menganalisa…"}</span>
+              <div className="min-w-0 max-w-[85%]">
+                <div className="rounded-2xl rounded-tl-sm border border-border bg-background px-3.5 py-2.5">
+                  {streamText ? (
+                    <>
+                      <Markdown text={streamText} />
+                      <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse rounded bg-primary align-text-bottom" />
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                        <span className="animate-pulse">{liveStatus || "Menganalisa…"}</span>
+                      </div>
+                      {reasonText && (
+                        <p className="mt-1.5 line-clamp-2 break-words text-xs italic text-muted-foreground/70">
+                          {reasonText}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -694,12 +956,28 @@ export function AssistantWorkspace({ initialChats }: { initialChats: ChatListIte
               placeholder="Tanya atau lampirkan file…"
               className="max-h-32 flex-1 resize-none bg-transparent px-1 py-1 text-sm outline-none placeholder:text-muted-foreground"
             />
-            <Button size="icon" onClick={() => send(input)} disabled={loading || uploading || (!input.trim() && pending.length === 0)}>
-              {loading || uploading ? <Loader2 className="animate-spin" /> : <CornerDownLeft />}
-            </Button>
+            {loading ? (
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={stopGeneration}
+                title="Hentikan respons"
+                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Square className="size-3.5 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                size="icon"
+                onClick={() => send(input)}
+                disabled={uploading || (!input.trim() && pending.length === 0)}
+              >
+                {uploading ? <Loader2 className="animate-spin" /> : <CornerDownLeft />}
+              </Button>
+            )}
           </div>
           <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">
-            Enter kirim · Shift+Enter baris baru · lampirkan gambar/PDF/Excel/CSV · Voltra AI bisa keliru.
+            Enter kirim · Shift+Enter baris baru · ⏹ hentikan respons · ✏️ edit pesan untuk kirim ulang · Voltra AI bisa keliru.
           </p>
           </div>
         </div>

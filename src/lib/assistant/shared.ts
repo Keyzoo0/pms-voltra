@@ -15,14 +15,33 @@ export type AssistantResult =
 /** Live progress events emitted while the agent works (streamed to the UI). */
 export type StatusEvent =
   | { kind: "thinking" }
-  | { kind: "tools"; tools: string[] };
+  | { kind: "tools"; tools: string[] }
+  | { kind: "delta"; text: string }
+  | { kind: "reasoning"; text: string };
 export type OnStatus = (ev: StatusEvent) => void;
+
+export type RunOptions = {
+  onEvent?: OnStatus;
+  /** Abort mid-generation (user pressed stop / client disconnected). */
+  signal?: AbortSignal;
+};
 
 export class AssistantError extends Error {
   code: "no_key" | "upstream" | "input";
   constructor(message: string, code: "no_key" | "upstream" | "input") {
     super(message);
     this.code = code;
+  }
+}
+
+/** Thrown when generation is interrupted; carries the partial answer so far. */
+export class AssistantAborted extends Error {
+  partial: string;
+  toolsUsed: string[];
+  constructor(partial: string, toolsUsed: string[]) {
+    super("aborted");
+    this.partial = partial;
+    this.toolsUsed = toolsUsed;
   }
 }
 
