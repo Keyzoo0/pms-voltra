@@ -1,15 +1,69 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useRef, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Check, Copy } from "lucide-react";
 
 /**
  * Full GFM renderer for assistant replies (react-markdown + remark-gfm):
  * blockquotes, horizontal rules, em/strong/strikethrough, nested & task
  * lists, tables, fenced code — styled to match the app, Claude/Qwen-grade.
+ * Blockquotes (message drafts) and code blocks get their own copy button.
  */
+
+function BlockCopyButton({ target }: { target: React.RefObject<HTMLElement | null> }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      title="Salin blok ini"
+      onClick={async () => {
+        const text = target.current?.innerText ?? "";
+        if (!text.trim()) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        } catch {}
+      }}
+      className="absolute right-1.5 top-1.5 rounded-md border border-border/60 bg-card/90 p-1.5 text-muted-foreground shadow-sm backdrop-blur-sm transition-opacity hover:text-foreground md:opacity-0 md:group-hover/blk:opacity-100"
+    >
+      {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+    </button>
+  );
+}
+
+function Blockquote({ children }: { children?: React.ReactNode }) {
+  const ref = useRef<HTMLQuoteElement>(null);
+  return (
+    <div className="group/blk relative my-2">
+      <blockquote
+        ref={ref}
+        className="rounded-r-lg border-l-2 border-primary/50 bg-muted/40 py-2 pl-3 pr-9 text-foreground/90 [&>p]:my-1"
+      >
+        {children}
+      </blockquote>
+      <BlockCopyButton target={ref} />
+    </div>
+  );
+}
+
+function PreBlock({ children }: { children?: React.ReactNode }) {
+  const ref = useRef<HTMLPreElement>(null);
+  return (
+    <div className="group/blk relative my-2">
+      <pre
+        ref={ref}
+        className="overflow-x-auto rounded-lg border border-border/60 bg-muted/60 p-3 pr-9 font-mono text-xs leading-relaxed"
+      >
+        {children}
+      </pre>
+      <BlockCopyButton target={ref} />
+    </div>
+  );
+}
 
 const components: Components = {
   p: ({ children }) => <p className="my-1.5 leading-relaxed first:mt-0 last:mb-0">{children}</p>,
@@ -43,18 +97,10 @@ const components: Components = {
     </ol>
   ),
   li: ({ children }) => <li className="pl-0.5 leading-relaxed [&>ul]:my-1 [&>ol]:my-1">{children}</li>,
-  blockquote: ({ children }) => (
-    <blockquote className="my-2 rounded-r-lg border-l-2 border-primary/50 bg-muted/40 py-2 pl-3 pr-3 text-foreground/90 [&>p]:my-1">
-      {children}
-    </blockquote>
-  ),
+  blockquote: ({ children }) => <Blockquote>{children}</Blockquote>,
   hr: () => <hr className="my-3 border-border/60" />,
   del: ({ children }) => <del className="opacity-70">{children}</del>,
-  pre: ({ children }) => (
-    <pre className="my-2 overflow-x-auto rounded-lg border border-border/60 bg-muted/60 p-3 font-mono text-xs leading-relaxed">
-      {children}
-    </pre>
-  ),
+  pre: ({ children }) => <PreBlock>{children}</PreBlock>,
   code: ({ className, children }) => {
     const isBlock = /language-/.test(className ?? "") || String(children).includes("\n");
     if (isBlock) return <code className={className}>{children}</code>;
